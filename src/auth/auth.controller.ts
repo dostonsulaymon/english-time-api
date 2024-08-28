@@ -10,6 +10,7 @@ export class AuthController {
   @Post('login')
   @UseFilters(PrismaClientExceptionFilter)
   async login(@Body() loginDto: Prisma.UserCreateInput) {
+    console.log("loginDto",loginDto);
     return this.authService.login(loginDto);
   }
 }
