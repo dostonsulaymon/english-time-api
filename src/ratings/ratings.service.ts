@@ -7,10 +7,73 @@ import { NewRatingDto } from './dto/new-rating.dto';
 export class RatingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getAll(period: RatingPeriod) {
+  async getByPeriod(period: RatingPeriod) {
+    const { startDate, endDate } = this.calculatePeriodDates(period);
+
+    // Get all ratings for the period
+    const ratings = await this.prisma.rating.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+          lt: endDate,
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    // Calculate total score per user during this period
+    const userScores = new Map();
+    ratings.forEach(rating => {
+      const userId = rating.userId;
+      const currentScore = userScores.get(userId) || 0;
+      userScores.set(userId, currentScore + rating.score);
+    });
+
+    // Get unique users with their data
+    const uniqueUsers = [...new Map(ratings.map(item => [item.userId, item.user])).values()];
+
+    // Prepare response with period-specific scores
+    const result = uniqueUsers.map(user => {
+      const periodScore = userScores.get(user.id) || 0;
+      return {
+        ...user,
+        currentCoins: periodScore, // Add current period coins
+      };
+    });
+
+    // Sort by period scores
+    result.sort((a, b) => b.currentCoins - a.currentCoins);
+
+    // Assign ratings
+    result.forEach((user, index) => {
+      user.rating = index + 1;
+    });
+
+    return result;
+  }
+
+  async getAllTime() {
+    // Get all users with their total coins (all-time)
+    const users = await this.prisma.user.findMany({
+      orderBy: {
+        coins: 'desc',
+      },
+    });
+
+    // Assign ratings based on the ordering
+    users.forEach((user, index) => {
+      user.rating = index + 1;
+    });
+
+    return users;
+  }
+
+  private calculatePeriodDates(period: RatingPeriod) {
     const currentDate = new Date();
     let startDate: Date;
-    let endDate: Date;
+    let endDate: Date = new Date();
 
     switch (period) {
       case RatingPeriod.DAILY:
@@ -49,31 +112,23 @@ export class RatingsService {
           1,
         );
         break;
+      case RatingPeriod.YEARLY:
+        startDate = new Date(
+          currentDate.getFullYear(),
+          0,
+          1,
+        );
+        endDate = new Date(
+          currentDate.getFullYear() + 1,
+          0,
+          1,
+        );
+        break;
       default:
         throw new BadRequestException('Invalid rating period');
     }
 
-    const ratings = await this.prisma.rating.findMany({
-      where: {
-        createdAt: {
-          gte: startDate,
-          lt: endDate,
-        },
-      },
-      include: {
-        user: true,
-      },
-      orderBy: {
-        score: 'desc',
-      },
-    });
-
-    ratings?.map((rating, index) => {
-      rating.user.rating = index + 1;
-      return rating;
-    });
-
-    return ratings;
+    return { startDate, endDate };
   }
 
   async saveNewRating(newRatingDto: NewRatingDto) {

@@ -15,9 +15,14 @@ import { ObjectId } from 'mongodb';
 export class RatingsController {
   constructor(private readonly ratingsService: RatingsService) {}
 
-  @Get('all')
-  async getAll(@Query('period') period: RatingPeriod) {
-    return await this.ratingsService.getAll(period);
+  @Get('period')
+  async getByPeriod(@Query('period') period: RatingPeriod) {
+    return await this.ratingsService.getByPeriod(period);
+  }
+
+  @Get('all-time')
+  async getAllTime() {
+    return await this.ratingsService.getAllTime();
   }
 
   @Post('save')
