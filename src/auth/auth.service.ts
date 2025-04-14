@@ -7,7 +7,8 @@ export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
   async login(loginDto: Prisma.UserCreateInput) {
-    const user = await this.prisma.user.findUnique({
+    // later change to findUnique
+    const user = await this.prisma.user.findFirst({
       where: { email: loginDto.email },
     });
 
