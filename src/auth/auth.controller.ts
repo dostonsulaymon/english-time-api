@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseFilters } from '@nestjs/common';
+import { Body, Controller, Delete, Post, Query, UseFilters } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Prisma } from '@prisma/client';
 import { PrismaClientExceptionFilter } from 'src/prisma-client-exception/prisma-client-exception.filter';
@@ -13,4 +13,13 @@ export class AuthController {
     console.log("loginDto",loginDto);
     return this.authService.login(loginDto);
   }
+
+  @Delete('/delete')
+  @UseFilters(PrismaClientExceptionFilter)
+  async delete(@Query('email') email: string) {
+
+    return this.authService.deleteByEmail(email);
+
+  }
+
 }
