@@ -2,10 +2,15 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ObjectId } from 'mongodb';
 import { PrismaService } from 'src/prisma.service';
+import { RatingsService } from '../ratings/ratings.service';
+import { RatingPeriod } from '../ratings/types/rating-period';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ratingsService: RatingsService,
+  ) {}
 
   async getUsers(order?: number, limit?: number) {
     const users = await this.prisma.user.findMany({
@@ -50,5 +55,57 @@ export class UsersService {
         },
       },
     });
+  }
+
+  async getUserStatistics(id: string) {
+    // Get the basic user information
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    // Get all-time ranking
+    const allTimeRankings = await this.ratingsService.getAllTime();
+    const allTimeUserRank = allTimeRankings.find((u) => u.id === id);
+
+    // Get periodic rankings
+    const dailyRankings = await this.ratingsService.getByPeriod(
+      RatingPeriod.DAILY,
+    );
+    const weeklyRankings = await this.ratingsService.getByPeriod(
+      RatingPeriod.WEEKLY,
+    );
+    const monthlyRankings = await this.ratingsService.getByPeriod(
+      RatingPeriod.MONTHLY,
+    );
+
+    // Find user in each period ranking
+    const dailyStats = dailyRankings.find((u) => u.id === id);
+    const weeklyStats = weeklyRankings.find((u) => u.id === id);
+    const monthlyStats = monthlyRankings.find((u) => u.id === id);
+
+    // Construct the response
+    return {
+      ...user,
+      daily: {
+        rating: dailyStats?.rating || 0,
+        daily_coins: dailyStats?.currentCoins || 0,
+      },
+      weekly: {
+        rating: weeklyStats?.rating || 0,
+        weekly_coins: weeklyStats?.currentCoins || 0,
+      },
+      monthly: {
+        rating: monthlyStats?.rating || 0,
+        monthly_coins: monthlyStats?.currentCoins || 0,
+      },
+      allTime: {
+        rating: allTimeUserRank?.rating || 0,
+        total_coins: user.coins,
+      },
+    };
   }
 }

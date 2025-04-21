@@ -33,6 +33,15 @@ export class UsersController {
     return this.usersService.getUser(id);
   }
 
+  @Get('/:id/statistics')
+  @UseFilters(PrismaClientExceptionFilter)
+  async getUserStatistics(@Param('id') id: string) {
+    if (!ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user id');
+    }
+    return this.usersService.getUserStatistics(id);
+  }
+
   @Patch('/:id')
   @UseFilters(PrismaClientExceptionFilter)
   async updateUser(
