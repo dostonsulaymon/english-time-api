@@ -87,6 +87,12 @@ export class UsersService {
     const weeklyStats = weeklyRankings.find((u) => u.id === id);
     const monthlyStats = monthlyRankings.find((u) => u.id === id);
 
+
+    const userIndex = allTimeRankings.findIndex(u => u.id === id);
+    user.rating = userIndex !== -1 ? userIndex + 1 : null;
+    // Set currentCoins to the daily coins value
+    user.currentCoins = dailyStats?.currentCoins || 0;
+
     // Construct the response
     return {
       ...user,
