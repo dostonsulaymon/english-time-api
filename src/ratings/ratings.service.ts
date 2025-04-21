@@ -7,7 +7,7 @@ import { NewRatingDto } from './dto/new-rating.dto';
 export class RatingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getByPeriod(period: RatingPeriod) {
+  async getByPeriod(period: RatingPeriod, limit: number = 10) {
     const { startDate, endDate } = this.calculatePeriodDates(period);
 
     // Get all ratings for the period
@@ -51,15 +51,16 @@ export class RatingsService {
       user.rating = index + 1;
     });
 
-    return result;
+    return result.slice(0, limit);
   }
 
-  async getAllTime() {
+  async getAllTime(limit: number = 10) {
     // Get all users with their total coins (all-time)
     const users = await this.prisma.user.findMany({
       orderBy: {
         coins: 'desc',
       },
+      take: limit,
     });
 
     // Assign ratings based on the ordering
