@@ -71,6 +71,9 @@ export class UsersService {
     const allTimeRankings = await this.ratingsService.getAllTime();
     const allTimeUserRank = allTimeRankings.find((u) => u.id === id);
 
+    const userIndex = allTimeRankings.findIndex((u) => u.id === id);
+    user.rating = userIndex !== -1 ? userIndex + 1 : null;
+
     // Get periodic rankings
     const dailyRankings = await this.ratingsService.getByPeriod(
       RatingPeriod.DAILY,
@@ -88,8 +91,6 @@ export class UsersService {
     const monthlyStats = monthlyRankings.find((u) => u.id === id);
 
 
-    const userIndex = allTimeRankings.findIndex(u => u.id === id);
-    user.rating = userIndex !== -1 ? userIndex + 1 : null;
     // Set currentCoins to the daily coins value
     user.currentCoins = dailyStats?.currentCoins || 0;
 
