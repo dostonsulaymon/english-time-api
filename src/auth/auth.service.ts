@@ -19,7 +19,23 @@ export class AuthService {
     return user;
   }
 
-  deleteByEmail(email: string) {
-    return this.prisma.user.deleteMany({ where: { email: email } });
-  }
-}
+  async deleteByEmail(email: string) {
+    // First, find the user to get their ID
+    const user = await this.prisma.user.findFirst({
+      where: { email: email },
+    });
+
+    if (!user) {
+      return { deleted: 0 }; // User not found
+    }
+
+    // Delete all ratings associated with the user
+    await this.prisma.rating.deleteMany({
+      where: { userId: user.id }
+    });
+
+    // Then delete the user
+    return this.prisma.user.deleteMany({
+      where: { email: email }
+    });
+  }}
