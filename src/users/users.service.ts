@@ -22,11 +22,11 @@ export class UsersService {
       take: limit,
     });
 
-    this.logger.debug(`Found ${users.length} users`);
+    //this.logger.debug(`Found ${users.length} users`);
 
     users.forEach((user, index) => {
       user.rating = index + 1;
-      this.logger.debug(`User ${user.id} assigned rating: ${user.rating}`);
+      //this.logger.debug(`User ${user.id} assigned rating: ${user.rating}`);
     });
 
     return users;
@@ -36,7 +36,7 @@ export class UsersService {
     this.logger.log(`Getting user by ID: ${id}`);
 
     if (!ObjectId.isValid(id)) {
-      this.logger.warn(`Invalid user ID format: ${id}`);
+      //this.logger.warn(`Invalid user ID format: ${id}`);
       throw new BadRequestException('Invalid user id');
     }
 
@@ -46,7 +46,7 @@ export class UsersService {
     });
 
     if (!user) {
-      this.logger.warn(`User not found with ID: ${id}`);
+      //this.logger.warn(`User not found with ID: ${id}`);
       return null;
     }
 
@@ -59,7 +59,7 @@ export class UsersService {
     const userIndex = allUsers.findIndex(u => u.id === id);
     if (userIndex !== -1) {
       user.rating = userIndex + 1;
-      this.logger.debug(`User ${id} has rating: ${user.rating}`);
+      //this.logger.debug(`User ${id} has rating: ${user.rating}`);
     }
 
     return user;
@@ -69,7 +69,7 @@ export class UsersService {
     this.logger.log(`Updating user ID: ${id} with data: ${JSON.stringify(updateUserDto)}`);
 
     if (!ObjectId.isValid(id)) {
-      this.logger.warn(`Invalid user ID format: ${id}`);
+      //this.logger.warn(`Invalid user ID format: ${id}`);
       throw new BadRequestException('Invalid user id');
     }
 
@@ -77,7 +77,7 @@ export class UsersService {
       // Check if we're updating coins
       if (updateUserDto.coins !== undefined) {
         const coinChange = updateUserDto.coins as number;
-        this.logger.debug(`Updating coins by ${coinChange}`);
+        //this.logger.debug(`Updating coins by ${coinChange}`);
 
         // If coins are being reduced, make sure user has enough
         if (coinChange < 0) {
@@ -87,7 +87,7 @@ export class UsersService {
           }
 
           if (user.coins + coinChange < 0) {
-            this.logger.warn(`Cannot reduce coins below zero. User ${id} has ${user.coins} coins, attempted change: ${coinChange}`);
+            //this.logger.warn(`Cannot reduce coins below zero. User ${id} has ${user.coins} coins, attempted change: ${coinChange}`);
             throw new BadRequestException('Coins cannot be negative');
           }
         }
@@ -103,10 +103,10 @@ export class UsersService {
         },
       });
 
-      this.logger.debug(`User updated successfully: ${JSON.stringify(updatedUser)}`);
+      //this.logger.debug(`User updated successfully: ${JSON.stringify(updatedUser)}`);
       return updatedUser;
     } catch (error) {
-      this.logger.error(`Error updating user: ${error.message}`, error.stack);
+      ////this.logger.error(`Error updating user: ${error.message}`, error.stack);
       throw error;
     }
   }
@@ -115,7 +115,7 @@ export class UsersService {
     this.logger.log(`Getting statistics for user ID: ${id}`);
 
     if (!ObjectId.isValid(id)) {
-      this.logger.warn(`Invalid user ID format: ${id}`);
+      //this.logger.warn(`Invalid user ID format: ${id}`);
       throw new BadRequestException('Invalid user id');
     }
 
@@ -126,11 +126,11 @@ export class UsersService {
       });
 
       if (!user) {
-        this.logger.warn(`User not found with ID: ${id}`);
+        //this.logger.warn(`User not found with ID: ${id}`);
         throw new BadRequestException('User not found');
       }
 
-      this.logger.debug(`Found user: ${user.username} (${user.email})`);
+      //this.logger.debug(`Found user: ${user.username} (${user.email})`);
 
       // Get all-time ranking (fully populated with all users)
       const allUsers = await this.prisma.user.findMany({
@@ -140,22 +140,22 @@ export class UsersService {
       // Find user's position in all-time ranking
       const userIndex = allUsers.findIndex(u => u.id === id);
       const allTimeRank = userIndex !== -1 ? userIndex + 1 : null;
-      this.logger.debug(`User ${id} all-time rank: ${allTimeRank}`);
+      //this.logger.debug(`User ${id} all-time rank: ${allTimeRank}`);
 
       // Get period-specific data
-      this.logger.debug('Getting daily rating data');
+      //this.logger.debug('Getting daily rating data');
       const dailyRankings = await this.ratingsService.getByPeriod(
         RatingPeriod.DAILY,
         allUsers.length, // Get all users to ensure we find our target user
       );
 
-      this.logger.debug('Getting weekly rating data');
+      //this.logger.debug('Getting weekly rating data');
       const weeklyRankings = await this.ratingsService.getByPeriod(
         RatingPeriod.WEEKLY,
         allUsers.length,
       );
 
-      this.logger.debug('Getting monthly rating data');
+      //this.logger.debug('Getting monthly rating data');
       const monthlyRankings = await this.ratingsService.getByPeriod(
         RatingPeriod.MONTHLY,
         allUsers.length,
@@ -166,7 +166,7 @@ export class UsersService {
       const weeklyStats = weeklyRankings.find(u => u.id === id);
       const monthlyStats = monthlyRankings.find(u => u.id === id);
 
-      this.logger.debug(`Daily stats found: ${!!dailyStats}, Weekly stats found: ${!!weeklyStats}, Monthly stats found: ${!!monthlyStats}`);
+      //this.logger.debug(`Daily stats found: ${!!dailyStats}, Weekly stats found: ${!!weeklyStats}, Monthly stats found: ${!!monthlyStats}`);
 
       // Calculate period ranks properly
       // If the user isn't in the period rankings, they have no activity in that period
@@ -195,10 +195,10 @@ export class UsersService {
         },
       };
 
-      this.logger.debug(`Returning user statistics: ${JSON.stringify(result)}`);
+      //this.logger.debug(`Returning user statistics: ${JSON.stringify(result)}`);
       return result;
     } catch (error) {
-      this.logger.error(`Error getting user statistics: ${error.message}`, error.stack);
+      ////this.logger.error(`Error getting user statistics: ${error.message}`, error.stack);
       throw error;
     }
   }

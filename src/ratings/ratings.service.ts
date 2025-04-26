@@ -13,7 +13,7 @@ export class RatingsService {
     this.logger.log(`Getting ratings for period: ${period}, limit: ${limit}`);
 
     const { startDate, endDate } = this.calculatePeriodDates(period);
-    this.logger.debug(`Period dates - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`);
+    //this.logger.debug(`Period dates - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`);
 
     // Get all ratings for the period
     const ratings = await this.prisma.rating.findMany({
@@ -28,7 +28,7 @@ export class RatingsService {
       },
     });
 
-    this.logger.debug(`Found ${ratings.length} ratings in the period`);
+    //this.logger.debug(`Found ${ratings.length} ratings in the period`);
 
     // Calculate total score per user during this period
     const userScores = new Map();
@@ -36,12 +36,12 @@ export class RatingsService {
       const userId = rating.userId;
       const currentScore = userScores.get(userId) || 0;
       userScores.set(userId, currentScore + rating.score);
-      this.logger.debug(`User ${userId} period score: ${currentScore + rating.score}`);
+      //this.logger.debug(`User ${userId} period score: ${currentScore + rating.score}`);
     });
 
     // Get unique users with their data
     const uniqueUsers = [...new Map(ratings.map(item => [item.userId, item.user])).values()];
-    this.logger.debug(`Found ${uniqueUsers.length} unique users in the period`);
+    //this.logger.debug(`Found ${uniqueUsers.length} unique users in the period`);
 
     // Prepare response with period-specific scores
     const result = uniqueUsers.map(user => {
@@ -58,7 +58,7 @@ export class RatingsService {
     // Assign ratings
     result.forEach((user, index) => {
       user.rating = index + 1;
-      this.logger.debug(`User ${user.id} ranked #${user.rating} with ${user.currentCoins} coins`);
+      //this.logger.debug(`User ${user.id} ranked #${user.rating} with ${user.currentCoins} coins`);
     });
 
     const finalResult = result.slice(0, limit);
@@ -81,7 +81,7 @@ export class RatingsService {
     // Assign ratings based on the ordering
     users.forEach((user, index) => {
       user.rating = index + 1;
-      this.logger.debug(`User ${user.id} all-time rank: #${user.rating} with ${user.coins} coins`);
+      //this.logger.debug(`User ${user.id} all-time rank: #${user.rating} with ${user.coins} coins`);
     });
 
     return users;
@@ -148,7 +148,7 @@ export class RatingsService {
         throw new BadRequestException('Invalid rating period');
     }
 
-    this.logger.debug(`Period ${period} calculated - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`);
+    //this.logger.debug(`Period ${period} calculated - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`);
     return { startDate, endDate };
   }
 
@@ -163,7 +163,7 @@ export class RatingsService {
           userId: newRatingDto.userId,
         },
       });
-      this.logger.debug(`Created rating record with ID: ${rating.id}`);
+      //this.logger.debug(`Created rating record with ID: ${rating.id}`);
 
       // Then, update the user's total coins
       const updatedUser = await this.prisma.user.update({
@@ -172,7 +172,7 @@ export class RatingsService {
           coins: { increment: newRatingDto.score },
         },
       });
-      this.logger.debug(`Updated user ${updatedUser.id} total coins to: ${updatedUser.coins}`);
+      //this.logger.debug(`Updated user ${updatedUser.id} total coins to: ${updatedUser.coins}`);
 
       return rating;
     } catch (error) {
