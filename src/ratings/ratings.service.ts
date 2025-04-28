@@ -9,11 +9,47 @@ export class RatingsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+
+  async cleanupOrphanedRatings() {
+    this.logger.log('Starting cleanup of orphaned ratings');
+
+    try {
+      // Find all valid user IDs
+      const validUsers = await this.prisma.user.findMany({
+        select: { id: true }
+      });
+
+      const validUserIds = validUsers.map(user => user.id);
+
+      // Delete ratings that reference non-existent users
+      const result = await this.prisma.rating.deleteMany({
+        where: {
+          userId: {
+            notIn: validUserIds
+          }
+        }
+      });
+
+      this.logger.log(`Cleanup complete: Deleted ${result.count} orphaned ratings`);
+      return result.count;
+    } catch (error) {
+      this.logger.error(`Error during orphaned ratings cleanup: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
   async getByPeriod(period: RatingPeriod, limit: number = 10) {
     this.logger.log(`Getting ratings for period: ${period}, limit: ${limit}`);
 
     const { startDate, endDate } = this.calculatePeriodDates(period);
     //this.logger.debug(`Period dates - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`);
+
+    // First find valid user IDs to ensure they exist
+    const validUsers = await this.prisma.user.findMany({
+      select: { id: true }
+    });
+
+    const validUserIds = validUsers.map(user => user.id);
 
     // Get all ratings for the period
     const ratings = await this.prisma.rating.findMany({
@@ -22,12 +58,14 @@ export class RatingsService {
           gte: startDate,
           lt: endDate,
         },
+        userId: {
+          in: validUserIds
+        }
       },
       include: {
         user: true,
       },
     });
-
     //this.logger.debug(`Found ${ratings.length} ratings in the period`);
 
     // Calculate total score per user during this period
@@ -153,31 +191,33 @@ export class RatingsService {
   }
 
   async saveNewRating(newRatingDto: NewRatingDto) {
-    this.logger.log(`Saving new rating - userId: ${newRatingDto.userId}, score: ${newRatingDto.score}`);
+    return this.prisma.$transaction(async (tx) => {
+      // Check if user exists
+      const user = await tx.user.findUnique({
+        where: { id: newRatingDto.userId }
+      });
 
-    try {
-      // First, create the rating record
-      const rating = await this.prisma.rating.create({
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
+
+      // Create rating
+      const rating = await tx.rating.create({
         data: {
           score: newRatingDto.score,
           userId: newRatingDto.userId,
         },
       });
-      //this.logger.debug(`Created rating record with ID: ${rating.id}`);
 
-      // Then, update the user's total coins
-      const updatedUser = await this.prisma.user.update({
+      // Update user
+      await tx.user.update({
         where: { id: newRatingDto.userId },
         data: {
           coins: { increment: newRatingDto.score },
         },
       });
-      //this.logger.debug(`Updated user ${updatedUser.id} total coins to: ${updatedUser.coins}`);
 
       return rating;
-    } catch (error) {
-      this.logger.error(`Error saving rating: ${error.message}`, error.stack);
-      throw error;
-    }
+    });
   }
 }

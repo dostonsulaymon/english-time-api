@@ -21,6 +21,14 @@ export class RatingsController {
 
   constructor(private readonly ratingsService: RatingsService) {}
 
+
+  // In ratings.controller.ts
+  @Post('cleanup')
+  async cleanupOrphanedRatings() {
+    this.logger.log('Manual cleanup of orphaned ratings triggered');
+    return this.ratingsService.cleanupOrphanedRatings();
+  }
+
   @Get('period')
   async getByPeriod(
     @Query('period') period: RatingPeriod,

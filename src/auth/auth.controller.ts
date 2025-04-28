@@ -14,12 +14,12 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  @Delete('/delete')
-  @UseFilters(PrismaClientExceptionFilter)
-  async delete(@Query('email') email: string) {
-
-    return this.authService.deleteByEmail(email);
-
-  }
+  // @Delete('/delete')
+  // @UseFilters(PrismaClientExceptionFilter)
+  // async delete(@Query('email') email: string) {
+  //
+  //   return this.authService.deleteByEmail(email);
+  //
+  // }
 
 }
