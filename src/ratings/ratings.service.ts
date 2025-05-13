@@ -9,31 +9,35 @@ export class RatingsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-
   async cleanupOrphanedRatings() {
     this.logger.log('Starting cleanup of orphaned ratings');
 
     try {
       // Find all valid user IDs
       const validUsers = await this.prisma.user.findMany({
-        select: { id: true }
+        select: { id: true },
       });
 
-      const validUserIds = validUsers.map(user => user.id);
+      const validUserIds = validUsers.map((user) => user.id);
 
       // Delete ratings that reference non-existent users
       const result = await this.prisma.rating.deleteMany({
         where: {
           userId: {
-            notIn: validUserIds
-          }
-        }
+            notIn: validUserIds,
+          },
+        },
       });
 
-      this.logger.log(`Cleanup complete: Deleted ${result.count} orphaned ratings`);
+      this.logger.log(
+        `Cleanup complete: Deleted ${result.count} orphaned ratings`,
+      );
       return result.count;
     } catch (error) {
-      this.logger.error(`Error during orphaned ratings cleanup: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error during orphaned ratings cleanup: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
@@ -46,10 +50,10 @@ export class RatingsService {
 
     // First find valid user IDs to ensure they exist
     const validUsers = await this.prisma.user.findMany({
-      select: { id: true }
+      select: { id: true },
     });
 
-    const validUserIds = validUsers.map(user => user.id);
+    const validUserIds = validUsers.map((user) => user.id);
 
     // Get all ratings for the period
     const ratings = await this.prisma.rating.findMany({
@@ -59,8 +63,8 @@ export class RatingsService {
           lt: endDate,
         },
         userId: {
-          in: validUserIds
-        }
+          in: validUserIds,
+        },
       },
       include: {
         user: true,
@@ -70,7 +74,7 @@ export class RatingsService {
 
     // Calculate total score per user during this period
     const userScores = new Map();
-    ratings.forEach(rating => {
+    ratings.forEach((rating) => {
       const userId = rating.userId;
       const currentScore = userScores.get(userId) || 0;
       userScores.set(userId, currentScore + rating.score);
@@ -78,11 +82,13 @@ export class RatingsService {
     });
 
     // Get unique users with their data
-    const uniqueUsers = [...new Map(ratings.map(item => [item.userId, item.user])).values()];
+    const uniqueUsers = [
+      ...new Map(ratings.map((item) => [item.userId, item.user])).values(),
+    ];
     //this.logger.debug(`Found ${uniqueUsers.length} unique users in the period`);
 
     // Prepare response with period-specific scores
-    const result = uniqueUsers.map(user => {
+    const result = uniqueUsers.map((user) => {
       const periodScore = userScores.get(user.id) || 0;
       return {
         ...user,
@@ -100,7 +106,9 @@ export class RatingsService {
     });
 
     const finalResult = result.slice(0, limit);
-    this.logger.log(`Returning ${finalResult.length} users for period ${period}`);
+    this.logger.log(
+      `Returning ${finalResult.length} users for period ${period}`,
+    );
 
     return finalResult;
   }
@@ -157,30 +165,6 @@ export class RatingsService {
           currentDate.getDate() - dayOfWeek + 7,
         );
         break;
-      case RatingPeriod.MONTHLY:
-        startDate = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          1,
-        );
-        endDate = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth() + 1,
-          1,
-        );
-        break;
-      case RatingPeriod.YEARLY:
-        startDate = new Date(
-          currentDate.getFullYear(),
-          0,
-          1,
-        );
-        endDate = new Date(
-          currentDate.getFullYear() + 1,
-          0,
-          1,
-        );
-        break;
       default:
         this.logger.error(`Invalid rating period: ${period}`);
         throw new BadRequestException('Invalid rating period');
@@ -194,7 +178,7 @@ export class RatingsService {
     return this.prisma.$transaction(async (tx) => {
       // Check if user exists
       const user = await tx.user.findUnique({
-        where: { id: newRatingDto.userId }
+        where: { id: newRatingDto.userId },
       });
 
       if (!user) {

@@ -155,16 +155,10 @@ export class UsersService {
         allUsers.length,
       );
 
-      //this.logger.debug('Getting monthly rating data');
-      const monthlyRankings = await this.ratingsService.getByPeriod(
-        RatingPeriod.MONTHLY,
-        allUsers.length,
-      );
 
       // Find user in each period ranking
       const dailyStats = dailyRankings.find(u => u.id === id);
       const weeklyStats = weeklyRankings.find(u => u.id === id);
-      const monthlyStats = monthlyRankings.find(u => u.id === id);
 
       //this.logger.debug(`Daily stats found: ${!!dailyStats}, Weekly stats found: ${!!weeklyStats}, Monthly stats found: ${!!monthlyStats}`);
 
@@ -172,7 +166,6 @@ export class UsersService {
       // If the user isn't in the period rankings, they have no activity in that period
       const dailyRank = dailyStats?.rating || 0;
       const weeklyRank = weeklyStats?.rating || 0;
-      const monthlyRank = monthlyStats?.rating || 0;
 
       // Construct the response
       const result = {
@@ -184,10 +177,6 @@ export class UsersService {
         weekly: {
           rating: weeklyRank,
           weekly_coins: weeklyStats?.currentCoins || 0,
-        },
-        monthly: {
-          rating: monthlyRank,
-          monthly_coins: monthlyStats?.currentCoins || 0,
         },
         allTime: {
           rating: allTimeRank || 0,
