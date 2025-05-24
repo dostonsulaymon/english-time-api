@@ -35,3 +35,16 @@ model Rating {
 
   @@index([userId, createdAt])
 }
+
+model Avatar {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  filename     String   @unique
+  originalName String
+  mimetype     String
+  size         Int
+  path         String
+  price        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
