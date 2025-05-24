@@ -2,10 +2,13 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { RatingPeriod } from './types/rating-period';
 import { NewRatingDto } from './dto/new-rating.dto';
+import { startOfDay, addDays, startOfWeek } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
 @Injectable()
 export class RatingsService {
   private readonly logger = new Logger(RatingsService.name);
+  private readonly TIMEZONE = 'Asia/Tashkent'; // UTC+5
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -46,7 +49,7 @@ export class RatingsService {
     this.logger.log(`Getting ratings for period: ${period}, limit: ${limit}`);
 
     const { startDate, endDate } = this.calculatePeriodDates(period);
-    //this.logger.debug(`Period dates - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`);
+    this.logger.debug(`Period dates - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`);
 
     // First find valid user IDs to ensure they exist
     const validUsers = await this.prisma.user.findMany({
@@ -70,7 +73,7 @@ export class RatingsService {
         user: true,
       },
     });
-    //this.logger.debug(`Found ${ratings.length} ratings in the period`);
+    this.logger.debug(`Found ${ratings.length} ratings in the period`);
 
     // Calculate total score per user during this period
     const userScores = new Map();
@@ -78,14 +81,13 @@ export class RatingsService {
       const userId = rating.userId;
       const currentScore = userScores.get(userId) || 0;
       userScores.set(userId, currentScore + rating.score);
-      //this.logger.debug(`User ${userId} period score: ${currentScore + rating.score}`);
     });
 
     // Get unique users with their data
     const uniqueUsers = [
       ...new Map(ratings.map((item) => [item.userId, item.user])).values(),
     ];
-    //this.logger.debug(`Found ${uniqueUsers.length} unique users in the period`);
+    this.logger.debug(`Found ${uniqueUsers.length} unique users in the period`);
 
     // Prepare response with period-specific scores
     const result = uniqueUsers.map((user) => {
@@ -102,7 +104,6 @@ export class RatingsService {
     // Assign ratings
     result.forEach((user, index) => {
       user.rating = index + 1;
-      //this.logger.debug(`User ${user.id} ranked #${user.rating} with ${user.currentCoins} coins`);
     });
 
     const finalResult = result.slice(0, limit);
@@ -127,50 +128,56 @@ export class RatingsService {
     // Assign ratings based on the ordering
     users.forEach((user, index) => {
       user.rating = index + 1;
-      //this.logger.debug(`User ${user.id} all-time rank: #${user.rating} with ${user.coins} coins`);
     });
 
     return users;
   }
 
   private calculatePeriodDates(period: RatingPeriod) {
-    const currentDate = new Date();
-    let startDate: Date;
-    let endDate: Date = new Date();
+    // Get current time in UTC
+    const nowUtc = new Date();
+
+    // Convert to Tashkent timezone for local calculations
+    const nowTashkent = toZonedTime(nowUtc, this.TIMEZONE);
+
+    let startDateTashkent: Date;
+    let endDateTashkent: Date;
 
     switch (period) {
       case RatingPeriod.DAILY:
-        startDate = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          currentDate.getDate(),
-        );
-        endDate = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          currentDate.getDate() + 1,
-        );
+        // Calculate start of current day in Tashkent timezone
+        startDateTashkent = startOfDay(nowTashkent);
+
+        // End date is start of next day in Tashkent timezone
+        endDateTashkent = addDays(startDateTashkent, 1);
         break;
+
       case RatingPeriod.WEEKLY:
-        // Fix: Properly calculate the start of the week (Sunday)
-        const dayOfWeek = currentDate.getDay(); // 0 is Sunday, 1 is Monday, etc.
-        startDate = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          currentDate.getDate() - dayOfWeek,
-        );
-        endDate = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          currentDate.getDate() - dayOfWeek + 7,
-        );
+        // Calculate start of current week (Sunday) in Tashkent timezone
+        // startOfWeek defaults to Sunday as first day of week
+        startDateTashkent = startOfWeek(nowTashkent, { weekStartsOn: 0 }); // 0 = Sunday
+
+        // End date is start of next week in Tashkent timezone
+        endDateTashkent = addDays(startDateTashkent, 7);
         break;
+
       default:
         this.logger.error(`Invalid rating period: ${period}`);
         throw new BadRequestException('Invalid rating period');
     }
 
-    //this.logger.debug(`Period ${period} calculated - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`);
+    // Convert Tashkent local times to UTC for database queries
+    // This is the critical fix - properly convert local times to UTC
+    const startDate = fromZonedTime(startDateTashkent, this.TIMEZONE);
+    const endDate = fromZonedTime(endDateTashkent, this.TIMEZONE);
+
+    this.logger.debug(
+      `Period ${period} in Tashkent time - start: ${startDateTashkent.toISOString()}, end: ${endDateTashkent.toISOString()}`,
+    );
+    this.logger.debug(
+      `Period ${period} in UTC for database - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`,
+    );
+
     return { startDate, endDate };
   }
 
@@ -203,5 +210,32 @@ export class RatingsService {
 
       return rating;
     });
+  }
+
+  // Helper method to get current time info for debugging
+  async getCurrentTimeInfo() {
+    const nowUtc = new Date();
+    const nowTashkent = toZonedTime(nowUtc, this.TIMEZONE);
+
+    const startOfDayTashkent = startOfDay(nowTashkent);
+    const startOfWeekTashkent = startOfWeek(nowTashkent, { weekStartsOn: 0 });
+
+    const startOfDayUtc = fromZonedTime(startOfDayTashkent, this.TIMEZONE);
+    const startOfWeekUtc = fromZonedTime(startOfWeekTashkent, this.TIMEZONE);
+
+    return {
+      currentTime: {
+        utc: nowUtc.toISOString(),
+        tashkent: nowTashkent.toISOString(),
+      },
+      dailyPeriod: {
+        startTashkent: startOfDayTashkent.toISOString(),
+        startUtc: startOfDayUtc.toISOString(),
+      },
+      weeklyPeriod: {
+        startTashkent: startOfWeekTashkent.toISOString(),
+        startUtc: startOfWeekUtc.toISOString(),
+      },
+    };
   }
 }

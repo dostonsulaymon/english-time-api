@@ -21,8 +21,20 @@ export class RatingsController {
 
   constructor(private readonly ratingsService: RatingsService) {}
 
+  // Debug endpoint to check timezone calculations
+  @Get('debug/time-info')
+  async getTimeInfo() {
+    this.logger.log('GET /ratings/debug/time-info - Getting current time information');
+    try {
+      const result = await this.ratingsService.getCurrentTimeInfo();
+      this.logger.log('Successfully retrieved time information');
+      return result;
+    } catch (error) {
+      this.logger.error(`Error getting time information: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
 
-  // In ratings.controller.ts
   @Post('cleanup')
   async cleanupOrphanedRatings() {
     this.logger.log('Manual cleanup of orphaned ratings triggered');
