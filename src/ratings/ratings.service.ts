@@ -153,11 +153,11 @@ export class RatingsService {
         break;
 
       case RatingPeriod.WEEKLY:
-        // Calculate start of current week (Sunday) in Tashkent timezone
-        // startOfWeek defaults to Sunday as first day of week
-        startDateTashkent = startOfWeek(nowTashkent, { weekStartsOn: 0 }); // 0 = Sunday
+        // Calculate start of current week (Monday) in Tashkent timezone
+        // weekStartsOn: 1 means Monday is the first day of week
+        startDateTashkent = startOfWeek(nowTashkent, { weekStartsOn: 1 }); // 1 = Monday
 
-        // End date is start of next week in Tashkent timezone
+        // End date is start of next week (next Monday) in Tashkent timezone
         endDateTashkent = addDays(startDateTashkent, 7);
         break;
 
@@ -218,7 +218,7 @@ export class RatingsService {
     const nowTashkent = toZonedTime(nowUtc, this.TIMEZONE);
 
     const startOfDayTashkent = startOfDay(nowTashkent);
-    const startOfWeekTashkent = startOfWeek(nowTashkent, { weekStartsOn: 0 });
+    const startOfWeekTashkent = startOfWeek(nowTashkent, { weekStartsOn: 1 }); // 1 = Monday
 
     const startOfDayUtc = fromZonedTime(startOfDayTashkent, this.TIMEZONE);
     const startOfWeekUtc = fromZonedTime(startOfWeekTashkent, this.TIMEZONE);
