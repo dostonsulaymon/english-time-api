@@ -1,0 +1,1 @@
+export { SkipAuth } from './skip-auth.decorator';
