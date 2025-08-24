@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient, TransactionStatus } from '@prisma/client';
 import { TransactionMethods } from './constants/transaction-methods';
 import { CheckPerformTransactionDto } from './dto/check-perform-transaction.dto';
@@ -14,6 +14,8 @@ import { CancelingReasons } from './constants/canceling-reasons';
 import { ValidationHelper } from '../../utils/validation.helper';
 import logger from '../../utils/logger';
 import { TransactionState } from './constants/transaction-state';
+import { GenerateLinkDto } from './dto/generate-link.dto';
+import { generatePaymeLink } from '../../shared/generators/payme-link.generator';
 
 @Injectable()
 export class PaymeService {
@@ -432,5 +434,29 @@ export class PaymeService {
     const timeoutDuration = 720 * 60 * 1000; // 720 minutes in ms
     const timeoutThreshold = new Date(Date.now() - timeoutDuration);
     return transactionCreatedAt < timeoutThreshold;
+  }
+
+  async generatePaymeLink(dto: GenerateLinkDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: dto.userId },
+    });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${dto.userId} not found`);
+    }
+    const plan = await this.prisma.plan.findUnique({
+      where: { id: dto.planId },
+    });
+
+    if (!plan) {
+      throw new NotFoundException(`Plan with ID ${dto.planId} not found`);
+    }
+
+    const paymeParams = {
+      planId: dto.planId,
+      userId: dto.userId,
+      amount: plan.price,
+    };
+
+    return generatePaymeLink(paymeParams);
   }
 }
