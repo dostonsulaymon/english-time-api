@@ -6,9 +6,10 @@ import { UsersModule } from './users/users.module';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthGuard } from './auth/auth.guard';
 import { RatingsModule } from './ratings/ratings.module';
+import { PaymeModule } from './payments/payme/payme.module';
 
 @Module({
-  imports: [AuthModule, UsersModule, RatingsModule],
+  imports: [AuthModule, UsersModule, RatingsModule, PaymeModule],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: AuthGuard }],
 })

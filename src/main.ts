@@ -3,7 +3,7 @@ import { AppModule } from './app.module';
 import * as morgan from 'morgan';
 import * as dotenv from 'dotenv';
 
-dotenv.config(); // This will load the environment variables from the .env file
+dotenv.config();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
