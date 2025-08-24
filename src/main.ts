@@ -12,7 +12,7 @@ async function bootstrap() {
     origin: '*',
   });
 
-  app.use(morgan('dev'));
+  // app.use(morgan('dev'));
 
   const port = process.env.PORT || 3000; // Use the PORT from the .env file or default to 3000
 
