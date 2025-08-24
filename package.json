@@ -29,6 +29,8 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/serve-static": "^4.0.2",
     "@prisma/client": "^5.14.0",
+    "@swc/cli": "^0.7.8",
+    "@swc/core": "^1.13.4",
     "@types/morgan": "^1.9.9",
     "@types/uuid": "^9.0.8",
     "argon2": "^0.44.0",
