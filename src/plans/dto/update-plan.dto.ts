@@ -1,11 +1,17 @@
-import { IsEnum, IsInt, IsOptional, IsPositive } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+} from 'class-validator';
 import { PlanName } from '@prisma/client';
 import { Type } from 'class-transformer';
 
 export class UpdatePlanDto {
   @IsOptional()
-  @IsEnum(PlanName)
-  name?: PlanName;
+  @IsString()
+  name?: string;
 
   @IsOptional()
   @IsInt()
