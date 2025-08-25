@@ -21,8 +21,10 @@ import { AvatarsService } from './avatars.service';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { PrismaClientExceptionFilter } from 'src/prisma-client-exception/prisma-client-exception.filter';
 import { ObjectId } from 'mongodb';
+import { SkipAuth } from '../auth/decorator';
 
 @Controller('avatars')
+@SkipAuth()
 @UseFilters(PrismaClientExceptionFilter)
 export class AvatarsController {
   private readonly logger = new Logger(AvatarsController.name);
