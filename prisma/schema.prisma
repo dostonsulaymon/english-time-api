@@ -8,19 +8,39 @@ datasource db {
 }
 
 model User {
-  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   username     String
   email        String
   avatar       String
   rating       Int?
-  coins        Int        @default(0)
+  coins        Int      @default(0)
   currentCoins Int?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   Rating       Rating[]
-  UserPlans    UserPlan[]
+
+  premiumAvatarId String? @db.ObjectId
+  premiumAvatar   Avatar? @relation(fields: [premiumAvatarId], references: [id])
+
+  UserPlans UserPlan[]
 
   PaymeTransaction PaymeTransaction[]
+}
+
+model Avatar {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  filename     String   @unique
+  originalName String
+  mimetype     String
+  size         Int
+  path         String
+  price        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relation to users who have this as premium avatar
+  premiumUsers User[]
 }
 
 model Rating {

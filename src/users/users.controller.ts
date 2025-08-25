@@ -7,6 +7,7 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Post,
   Query,
   UseFilters,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import { UsersService } from './users.service';
 import { Prisma } from '@prisma/client';
 import { PrismaClientExceptionFilter } from 'src/prisma-client-exception/prisma-client-exception.filter';
 import { ObjectId } from 'mongodb';
+import { PremiumUpgradeDto, PremiumUpgradeResponse } from './dto/premium-upgrade.dto';
 
 @Controller('users')
 @UseFilters(PrismaClientExceptionFilter)
@@ -79,6 +81,33 @@ export class UsersController {
       return stats;
     } catch (error) {
       // //this.logger.error(`Error getting user statistics: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  @Post('/:id/premium')
+  async upgradeToPremium(
+    @Param('id') id: string,
+    @Body() upgradeDto: PremiumUpgradeDto,
+  ): Promise<PremiumUpgradeResponse> {
+    this.logger.log(`POST /users/${id}/premium - avatarId: ${upgradeDto.avatarId}`);
+
+    if (!ObjectId.isValid(id)) {
+      this.logger.warn(`Invalid user ID format: ${id}`);
+      throw new BadRequestException('Invalid user id');
+    }
+
+    if (!upgradeDto.avatarId || !ObjectId.isValid(upgradeDto.avatarId)) {
+      this.logger.warn(`Invalid avatar ID format: ${upgradeDto.avatarId}`);
+      throw new BadRequestException('Invalid avatar id');
+    }
+
+    try {
+      const result = await this.usersService.upgradeToPremium(id, upgradeDto.avatarId);
+      this.logger.log(`Successfully upgraded user to premium: ${id}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Error upgrading user to premium: ${error.message}`, error.stack);
       throw error;
     }
   }
