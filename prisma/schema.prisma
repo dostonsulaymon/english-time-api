@@ -19,6 +19,8 @@ model User {
   updatedAt    DateTime @updatedAt
   Rating       Rating[]
 
+  status Boolean @default(false)
+
   premiumAvatarId String? @db.ObjectId
   premiumAvatar   Avatar? @relation(fields: [premiumAvatarId], references: [id])
 
