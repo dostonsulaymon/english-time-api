@@ -41,6 +41,8 @@ model Avatar {
 
   // Relation to users who have this as premium avatar
   premiumUsers User[]
+
+  @@map("avatar")
 }
 
 model Rating {

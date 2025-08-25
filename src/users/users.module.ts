@@ -8,5 +8,6 @@ import { RatingsService } from '../ratings/ratings.service';
   controllers: [UsersController],
   providers: [UsersService, PrismaService, RatingsService],
 
+
 })
 export class UsersModule {}
