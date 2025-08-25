@@ -2,15 +2,22 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import * as morgan from 'morgan';
 import * as dotenv from 'dotenv';
+import { join } from 'path';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
-dotenv.config();
+dotenv.config(); // This will load the environment variables from the .env file
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.enableCors({
     origin: '*',
   });
+
+  app.useStaticAssets(join(process.cwd(), 'public'));
+
+  app.setViewEngine('ejs');
+  app.setBaseViewsDir(join(process.cwd(), 'view'));
 
   // app.use(morgan('dev'));
 
