@@ -410,12 +410,19 @@ export class PaymeService {
       const user = await this.prisma.user.findUnique({
         where: { id: transaction.userId },
       });
+
       if (user) {
         logger.warn(
           `User found for payment success processing - userId: ${user.id}`,
         );
         console.log(`Transaction happened!`);
 
+        // 🔹 Remove all existing userPlans of this user
+        await this.prisma.userPlan.deleteMany({
+          where: { userId: transaction.userId },
+        });
+
+        // 🔹 Create new plan for the user
         await this.userPlansService.handleSuccessfulPayment(
           transaction.userId,
           transaction.planId,

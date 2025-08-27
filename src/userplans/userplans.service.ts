@@ -242,16 +242,14 @@ export class UserPlansService {
 
     try {
       await this.prisma.$transaction(async (prisma) => {
-        // 1. Check if user already has an active plan
         const existingActivePlan = await prisma.userPlan.findFirst({
           where: {
             userId,
             status: UserPlanStatus.ACTIVE,
-            endDate: { gte: new Date() }, // Still active by date
+            endDate: { gte: new Date() },
           },
         });
 
-        // 2. If user has an active plan, don't allow new purchase
         if (existingActivePlan) {
           throw new BadRequestException(
             `User ${userId} already has an active plan ${existingActivePlan.id}. Cannot purchase a new plan until current plan expires.`
