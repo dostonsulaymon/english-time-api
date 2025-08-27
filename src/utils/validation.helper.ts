@@ -1,10 +1,11 @@
-import { validate as uuidValidate, version as uuidVersion } from 'uuid';
+import { ObjectId } from 'mongodb';
 
 export class ValidationHelper {
   static isValidObjectId(id: string): boolean {
     if (!id || typeof id !== 'string') {
       return false;
     }
-    return uuidValidate(id) && uuidVersion(id) === 4;
+
+    return ObjectId.isValid(id);
   }
 }
