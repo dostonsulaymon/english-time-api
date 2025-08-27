@@ -66,7 +66,6 @@ export class UsersService {
       const updatedUser = await prisma.user.update({
         where: { id: userId },
         data: {
-          status: true,
           coins: newCoinBalance,
           premiumAvatarId: avatarId,
         },

@@ -16,12 +16,13 @@ import logger from '../../utils/logger';
 import { TransactionState } from './constants/transaction-state';
 import { GenerateLinkDto } from './dto/generate-link.dto';
 import { generatePaymeLink } from '../../shared/generators/payme-link.generator';
+import { UserPlansService } from '../../userplans/userplans.service';
 
 @Injectable()
 export class PaymeService {
   private readonly prisma: PrismaClient;
 
-  constructor() {
+  constructor(private readonly userPlansService: UserPlansService) {
     this.prisma = new PrismaClient();
   }
 
@@ -147,14 +148,18 @@ export class PaymeService {
     const userId = createTransactionDto.params?.account?.user_id;
     const transId = createTransactionDto.params?.id;
 
-    logger.warn(`CreateTransaction params - planId: ${planId}, userId: ${userId}, transId: ${transId}`);
+    logger.warn(
+      `CreateTransaction params - planId: ${planId}, userId: ${userId}, transId: ${transId}`,
+    );
     logger.warn(`Amount received: ${createTransactionDto.params.amount}`);
 
     // Validation with detailed logging
     const isPlanIdValid = ValidationHelper.isValidObjectId(planId);
     const isUserIdValid = ValidationHelper.isValidObjectId(userId);
 
-    logger.warn(`Validation results - planId valid: ${isPlanIdValid}, userId valid: ${isUserIdValid}`);
+    logger.warn(
+      `Validation results - planId valid: ${isPlanIdValid}, userId valid: ${isUserIdValid}`,
+    );
 
     if (!isPlanIdValid) {
       logger.warn(`Invalid planId - returning ProductNotFound error`);
@@ -169,21 +174,30 @@ export class PaymeService {
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
-    logger.warn(`Database results - plan found: ${!!plan}, user found: ${!!user}`);
-    if (plan) logger.warn(`Plan details - id: ${plan.id}, price: ${plan.price}, name: ${plan.name}`);
+    logger.warn(
+      `Database results - plan found: ${!!plan}, user found: ${!!user}`,
+    );
+    if (plan)
+      logger.warn(
+        `Plan details - id: ${plan.id}, price: ${plan.price}, name: ${plan.name}`,
+      );
 
     if (!user) {
       logger.warn(`User not found in database - returning UserNotFound error`);
       return { error: PaymeError.UserNotFound, id: transId };
     }
     if (!plan) {
-      logger.warn(`Plan not found in database - returning ProductNotFound error`);
+      logger.warn(
+        `Plan not found in database - returning ProductNotFound error`,
+      );
       return { error: PaymeError.ProductNotFound, id: transId };
     }
 
     logger.error(`price in dto is ${createTransactionDto.params.amount}`);
     logger.error(`price in plan is ${plan.price}`);
-    logger.error(`dto amount / 100 = ${createTransactionDto.params.amount / 100}`);
+    logger.error(
+      `dto amount / 100 = ${createTransactionDto.params.amount / 100}`,
+    );
 
     if (createTransactionDto.params.amount / 100 !== plan.price) {
       logger.warn(`Price mismatch - returning InvalidAmount error`);
@@ -199,10 +213,14 @@ export class PaymeService {
 
     logger.warn(`Existing pending transaction found: ${!!existingTransaction}`);
     if (existingTransaction) {
-      logger.warn(`Existing transaction details - id: ${existingTransaction.id}, paymeTransId: ${existingTransaction.paymeTransId}`);
+      logger.warn(
+        `Existing transaction details - id: ${existingTransaction.id}, paymeTransId: ${existingTransaction.paymeTransId}`,
+      );
 
       if (existingTransaction.paymeTransId === transId) {
-        logger.warn(`Same transaction ID found - returning existing transaction`);
+        logger.warn(
+          `Same transaction ID found - returning existing transaction`,
+        );
         return {
           result: {
             transaction: existingTransaction.id,
@@ -211,7 +229,9 @@ export class PaymeService {
           },
         };
       }
-      logger.warn(`Different transaction ID - returning TransactionInProcess error`);
+      logger.warn(
+        `Different transaction ID - returning TransactionInProcess error`,
+      );
       return { error: PaymeError.TransactionInProcess, id: transId };
     }
 
@@ -301,7 +321,9 @@ export class PaymeService {
 
   async performTransaction(performTransactionDto: PerformTransactionDto) {
     logger.warn(`=== PerformTransaction START ===`);
-    logger.warn(`PerformTransaction - transId: ${performTransactionDto.params.id}`);
+    logger.warn(
+      `PerformTransaction - transId: ${performTransactionDto.params.id}`,
+    );
 
     const transaction = await this.prisma.paymeTransaction.findUnique({
       where: { paymeTransId: performTransactionDto.params.id },
@@ -309,7 +331,9 @@ export class PaymeService {
 
     logger.warn(`Transaction found: ${!!transaction}`);
     if (transaction) {
-      logger.warn(`Transaction details - id: ${transaction.id}, status: ${transaction.status}, state: ${transaction.state}`);
+      logger.warn(
+        `Transaction details - id: ${transaction.id}, status: ${transaction.status}, state: ${transaction.state}`,
+      );
     }
 
     if (!transaction) {
@@ -321,10 +345,14 @@ export class PaymeService {
     }
 
     if (transaction.status !== TransactionStatus.PENDING) {
-      logger.warn(`Transaction status is not PENDING - current status: ${transaction.status}`);
+      logger.warn(
+        `Transaction status is not PENDING - current status: ${transaction.status}`,
+      );
 
       if (transaction.status !== TransactionStatus.PAID) {
-        logger.warn(`Transaction not PAID either - returning CantDoOperation error`);
+        logger.warn(
+          `Transaction not PAID either - returning CantDoOperation error`,
+        );
         return {
           error: PaymeError.CantDoOperation,
           id: performTransactionDto.params.id,
@@ -378,19 +406,30 @@ export class PaymeService {
     });
 
     logger.warn(`Transaction updated to PAID - id: ${updatedPayment.id}`);
-
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: transaction.userId },
       });
       if (user) {
-        logger.warn(`User found for payment success processing - userId: ${user.id}`);
+        logger.warn(
+          `User found for payment success processing - userId: ${user.id}`,
+        );
         console.log(`Transaction happened!`);
+
+        await this.userPlansService.handleSuccessfulPayment(
+          transaction.userId,
+          transaction.planId,
+        );
+
+        console.log(
+          `Successfully processed user plan for userId: ${user.id}, planId: ${transaction.planId}`,
+        );
       } else {
         logger.warn(`User not found for payment success processing`);
       }
     } catch (error) {
       logger.error('Error handling payment success:', error);
+      // Don't throw here - payment was successful, we just log the user plan creation error
     }
 
     logger.warn(`=== PerformTransaction END ===`);
@@ -407,7 +446,9 @@ export class PaymeService {
     logger.warn(`=== CancelTransaction START ===`);
 
     const transId = cancelTransactionDto.params.id;
-    logger.warn(`CancelTransaction - transId: ${transId}, reason: ${cancelTransactionDto.params.reason}`);
+    logger.warn(
+      `CancelTransaction - transId: ${transId}, reason: ${cancelTransactionDto.params.reason}`,
+    );
 
     const transaction = await this.prisma.paymeTransaction.findUnique({
       where: { paymeTransId: transId },
@@ -415,7 +456,9 @@ export class PaymeService {
 
     logger.warn(`Transaction found: ${!!transaction}`);
     if (transaction) {
-      logger.warn(`Transaction details - id: ${transaction.id}, status: ${transaction.status}, state: ${transaction.state}`);
+      logger.warn(
+        `Transaction details - id: ${transaction.id}, status: ${transaction.status}, state: ${transaction.state}`,
+      );
     }
 
     if (!transaction) {
@@ -447,7 +490,9 @@ export class PaymeService {
     }
 
     if (transaction.state !== TransactionState.Paid) {
-      logger.warn(`Transaction state is not Paid - current state: ${transaction.state} - returning existing state`);
+      logger.warn(
+        `Transaction state is not Paid - current state: ${transaction.state} - returning existing state`,
+      );
       return {
         result: {
           state: transaction.state,
@@ -489,7 +534,9 @@ export class PaymeService {
 
     logger.warn(`Transaction found: ${!!transaction}`);
     if (transaction) {
-      logger.warn(`Transaction details - id: ${transaction.id}, status: ${transaction.status}, state: ${transaction.state}`);
+      logger.warn(
+        `Transaction details - id: ${transaction.id}, status: ${transaction.status}, state: ${transaction.state}`,
+      );
     }
 
     if (!transaction) {
@@ -502,9 +549,7 @@ export class PaymeService {
 
     const result = {
       create_time: transaction.createdAt.getTime(),
-      perform_time: transaction.performAt
-        ? transaction.performAt.getTime()
-        : 0,
+      perform_time: transaction.performAt ? transaction.performAt.getTime() : 0,
       cancel_time: transaction.cancelAt ? transaction.cancelAt.getTime() : 0,
       transaction: transaction.id,
       state: transaction.state,
@@ -519,7 +564,9 @@ export class PaymeService {
 
   async getStatement(getStatementDto: GetStatementDto) {
     logger.warn(`=== GetStatement START ===`);
-    logger.warn(`GetStatement - from: ${getStatementDto.params.from}, to: ${getStatementDto.params.to}`);
+    logger.warn(
+      `GetStatement - from: ${getStatementDto.params.from}, to: ${getStatementDto.params.to}`,
+    );
 
     const transactions = await this.prisma.paymeTransaction.findMany({
       where: {
@@ -530,7 +577,9 @@ export class PaymeService {
       },
     });
 
-    logger.warn(`Found ${transactions.length} transactions in the specified period`);
+    logger.warn(
+      `Found ${transactions.length} transactions in the specified period`,
+    );
 
     const result = {
       transactions: transactions.map((transaction) => ({
