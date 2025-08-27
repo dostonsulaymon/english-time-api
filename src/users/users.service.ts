@@ -114,14 +114,12 @@ export class UsersService {
             createdAt: 'desc',
           },
         },
+        premiumAvatar: true,  
       },
     });
 
-    //this.logger.debug(`Found ${users.length} users`);
-
     users.forEach((user, index) => {
       user.rating = index + 1;
-      //this.logger.debug(`User ${user.id} assigned rating: ${user.rating}`);
     });
 
     return users;
@@ -135,12 +133,13 @@ export class UsersService {
       include: {
         userPlans: {
           include: {
-            plan: true,
+            plan: true, 
           },
           orderBy: {
             createdAt: 'desc',
           },
         },
+        premiumAvatar: true,  
       },
     });
 
@@ -151,6 +150,7 @@ export class UsersService {
     this.logger.log(`Successfully retrieved user: ${id}`);
     return user;
   }
+
 
   async updateUser(id: string, updateUserDto: Prisma.UserUpdateInput) {
     this.logger.log(

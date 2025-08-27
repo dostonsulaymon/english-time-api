@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
-import { Prisma, UserPlan } from '@prisma/client';
+import { Prisma, UserPlan, UserPlanStatus } from '@prisma/client';
 
 export interface CreateUserPlanDto {
   userId: string;
@@ -10,6 +10,7 @@ export interface CreateUserPlanDto {
 export interface UpdateUserPlanDto {
   startDate?: Date;
   endDate?: Date;
+  status?: UserPlanStatus;
 }
 
 @Injectable()
@@ -41,8 +42,8 @@ export class UserPlansService {
     }
 
     // Check if user already has an active plan
-    const existingUserPlan = await this.findActiveUserPlan(createUserPlanDto.userId);
-    if (existingUserPlan) {
+    const existingActivePlan = await this.findActiveUserPlan(createUserPlanDto.userId);
+    if (existingActivePlan) {
       throw new BadRequestException('User already has an active plan');
     }
 
@@ -56,6 +57,7 @@ export class UserPlansService {
         planId: createUserPlanDto.planId,
         startDate,
         endDate,
+        status: UserPlanStatus.ACTIVE,
       },
       include: {
         user: true,
@@ -104,7 +106,7 @@ export class UserPlansService {
     return userPlan;
   }
 
-  // Find user plans by user ID
+  // Find user plans by user ID (all plans - active and inactive)
   async findByUserId(userId: string): Promise<UserPlan[]> {
     return this.prisma.userPlan.findMany({
       where: { userId },
@@ -125,6 +127,7 @@ export class UserPlansService {
     return this.prisma.userPlan.findFirst({
       where: {
         userId,
+        status: UserPlanStatus.ACTIVE,
         startDate: { lte: now },
         endDate: { gte: now },
       },
@@ -153,20 +156,23 @@ export class UserPlansService {
     return updatedUserPlan;
   }
 
-  // Delete user plan
+  // Delete user plan (soft delete by marking as canceled)
   async remove(id: string): Promise<UserPlan> {
     // Check if user plan exists
     await this.findOne(id);
 
-    const deletedUserPlan = await this.prisma.userPlan.delete({
+    const deletedUserPlan = await this.prisma.userPlan.update({
       where: { id },
+      data: {
+        status: UserPlanStatus.CANCELED,
+      },
       include: {
         user: true,
         plan: true,
       },
     });
 
-    this.logger.log(`User plan deleted successfully - ID: ${id}`);
+    this.logger.log(`User plan marked as canceled successfully - ID: ${id}`);
     return deletedUserPlan;
   }
 
@@ -175,10 +181,47 @@ export class UserPlansService {
     const userPlan = await this.findOne(id);
     const now = new Date();
 
-    return userPlan.startDate <= now && userPlan.endDate >= now;
+    return (
+      userPlan.status === UserPlanStatus.ACTIVE &&
+      userPlan.startDate <= now &&
+      userPlan.endDate >= now
+    );
   }
 
-  // Get expired user plans
+  // Get expired plans that are still marked as active (for cleanup)
+  async findExpiredActivePlans(): Promise<UserPlan[]> {
+    const now = new Date();
+
+    return this.prisma.userPlan.findMany({
+      where: {
+        status: UserPlanStatus.ACTIVE,
+        endDate: { lt: now },
+      },
+      include: {
+        user: true,
+        plan: true,
+      },
+    });
+  }
+
+  // Mark expired active plans as expired
+  async markExpiredPlansAsExpired(): Promise<void> {
+    const now = new Date();
+
+    const result = await this.prisma.userPlan.updateMany({
+      where: {
+        status: UserPlanStatus.ACTIVE,
+        endDate: { lt: now },
+      },
+      data: {
+        status: UserPlanStatus.EXPIRED,
+      },
+    });
+
+    this.logger.log(`Marked ${result.count} expired plans as EXPIRED`);
+  }
+
+  // Get all expired plans (regardless of status)
   async findExpiredPlans(): Promise<UserPlan[]> {
     const now = new Date();
 
@@ -193,32 +236,41 @@ export class UserPlansService {
     });
   }
 
-  // METHOD FOR PAYMENT SUCCESS PROCESSING
+  // UPDATED METHOD FOR PAYMENT SUCCESS PROCESSING
   async handleSuccessfulPayment(userId: string, planId: string): Promise<void> {
     this.logger.log(`Processing successful payment for user ${userId} and plan ${planId}`);
 
     try {
       await this.prisma.$transaction(async (prisma) => {
         // 1. Check if user already has an active plan
-        const now = new Date();
         const existingActivePlan = await prisma.userPlan.findFirst({
           where: {
             userId,
-            startDate: { lte: now },
-            endDate: { gte: now },
+            status: UserPlanStatus.ACTIVE,
+            endDate: { gte: new Date() }, // Still active by date
           },
         });
 
-        // 2. If user has an active plan, we might want to extend it or replace it
-        // For now, let's replace it (delete the old one)
+        // 2. If user has an active plan, don't allow new purchase
         if (existingActivePlan) {
-          this.logger.warn(`User ${userId} already has an active plan ${existingActivePlan.id}, will be replaced`);
-          await prisma.userPlan.delete({
-            where: { id: existingActivePlan.id },
-          });
+          throw new BadRequestException(
+            `User ${userId} already has an active plan ${existingActivePlan.id}. Cannot purchase a new plan until current plan expires.`
+          );
         }
 
-        // 3. Get plan details to calculate end date
+        // 3. Mark any expired but still ACTIVE status plans as EXPIRED
+        await prisma.userPlan.updateMany({
+          where: {
+            userId,
+            status: UserPlanStatus.ACTIVE,
+            endDate: { lt: new Date() },
+          },
+          data: {
+            status: UserPlanStatus.EXPIRED,
+          },
+        });
+
+        // 4. Get plan details to calculate end date
         const plan = await prisma.plan.findUnique({
           where: { id: planId },
         });
@@ -227,23 +279,24 @@ export class UserPlansService {
           throw new Error(`Plan with ID ${planId} not found`);
         }
 
-        // 4. Calculate end date (duration in days)
+        // 5. Calculate end date (duration in days)
         const startDate = new Date();
         const endDate = new Date(startDate.getTime() + (plan.duration * 24 * 60 * 60 * 1000));
 
-        // 5. Create new user plan
+        // 6. Create new user plan
         const userPlan = await prisma.userPlan.create({
           data: {
             userId,
             planId,
             startDate,
             endDate,
+            status: UserPlanStatus.ACTIVE,
           },
         });
 
         this.logger.log(`Created user plan ${userPlan.id} for user ${userId}`);
 
-        // 6. Update user status to premium (true)
+        // 7. Update user status to premium (true)
         await prisma.user.update({
           where: { id: userId },
           data: { status: true },
@@ -257,5 +310,47 @@ export class UserPlansService {
       this.logger.error(`Error processing successful payment for user ${userId}:`, error);
       throw error;
     }
+  }
+
+  // Utility method to get user's plan history
+  async getUserPlanHistory(userId: string): Promise<UserPlan[]> {
+    return this.prisma.userPlan.findMany({
+      where: { userId },
+      include: {
+        plan: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
+
+  // Method to cancel an active plan (different from remove which soft deletes)
+  async cancelActivePlan(userId: string): Promise<UserPlan | null> {
+    const activePlan = await this.findActiveUserPlan(userId);
+
+    if (!activePlan) {
+      return null;
+    }
+
+    const canceledPlan = await this.prisma.userPlan.update({
+      where: { id: activePlan.id },
+      data: {
+        status: UserPlanStatus.CANCELED,
+      },
+      include: {
+        user: true,
+        plan: true,
+      },
+    });
+
+    // Also update user status to non-premium
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { status: false },
+    });
+
+    this.logger.log(`Canceled active plan ${activePlan.id} for user ${userId}`);
+    return canceledPlan;
   }
 }
