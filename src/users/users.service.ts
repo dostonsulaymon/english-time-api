@@ -118,15 +118,20 @@ export class UsersService {
     return users;
   }
 
-  // Update your existing getUser method in UsersService to include premium avatar
-
   async getUser(id: string) {
     this.logger.log(`Getting user by ID: ${id}`);
 
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        premiumAvatar: true, // Include premium avatar relation
+        UserPlans: {
+          include: {
+            plan: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
       },
     });
 
@@ -134,26 +139,8 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    // Transform the response to include premium avatar URL if exists
-    const userResponse = {
-      ...user,
-      premiumAvatar: user.premiumAvatar
-        ? {
-          id: user.premiumAvatar.id,
-          name: user.premiumAvatar.name,
-          url: `${this.baseUrl}/avatars/${user.premiumAvatar.id}`,
-          price: user.premiumAvatar.price,
-          filename: user.premiumAvatar.filename,
-          mimetype: user.premiumAvatar.mimetype,
-          size: user.premiumAvatar.size,
-          createdAt: user.premiumAvatar.createdAt,
-          updatedAt: user.premiumAvatar.updatedAt,
-        }
-        : null,
-    };
-
     this.logger.log(`Successfully retrieved user: ${id}`);
-    return userResponse;
+    return user;
   }
 
   async updateUser(id: string, updateUserDto: Prisma.UserUpdateInput) {
