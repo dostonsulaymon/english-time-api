@@ -4,6 +4,7 @@ import {RequestBody} from './types/incoming-request-body';
 import {PaymeBasicAuthGuard} from "./auth/guards/payme.guard";
 import { SkipAuth } from '../../auth/decorator';
 import { GenerateLinkDto } from './dto/generate-link.dto';
+import logger from '../../utils/logger';
 
 
 @Controller('payme')
@@ -15,6 +16,7 @@ export class PaymeController {
   @UseGuards(PaymeBasicAuthGuard)
   @HttpCode(HttpStatus.OK)
   async handleTransactionMethods(@Body() reqBody: RequestBody) {
+    logger.warn(`reqBody: ${JSON.stringify(reqBody)}`);
     return await this.paymeService.handleTransactionMethods(reqBody);
   }
 
