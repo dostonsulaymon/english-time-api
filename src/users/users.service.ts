@@ -105,7 +105,16 @@ export class UsersService {
     const users = await this.prisma.user.findMany({
       orderBy: { coins: order ? 'asc' : 'desc' },
       take: limit,
-      include: { premiumAvatar: true },
+      include: {
+        userPlans: {
+          include: {
+            plan: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+      },
     });
 
     //this.logger.debug(`Found ${users.length} users`);
@@ -124,7 +133,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        UserPlans: {
+        userPlans: {
           include: {
             plan: true,
           },
