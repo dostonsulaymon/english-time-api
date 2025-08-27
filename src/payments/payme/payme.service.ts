@@ -141,36 +141,68 @@ export class PaymeService {
   }
 
   async createTransaction(createTransactionDto: CreateTransactionDto) {
+    logger.warn(`=== CreateTransaction START ===`);
+
     const planId = createTransactionDto.params?.account?.plan_id;
     const userId = createTransactionDto.params?.account?.user_id;
     const transId = createTransactionDto.params?.id;
 
-    if (!ValidationHelper.isValidObjectId(planId)) {
+    logger.warn(`CreateTransaction params - planId: ${planId}, userId: ${userId}, transId: ${transId}`);
+    logger.warn(`Amount received: ${createTransactionDto.params.amount}`);
+
+    // Validation with detailed logging
+    const isPlanIdValid = ValidationHelper.isValidObjectId(planId);
+    const isUserIdValid = ValidationHelper.isValidObjectId(userId);
+
+    logger.warn(`Validation results - planId valid: ${isPlanIdValid}, userId valid: ${isUserIdValid}`);
+
+    if (!isPlanIdValid) {
+      logger.warn(`Invalid planId - returning ProductNotFound error`);
       return { error: PaymeError.ProductNotFound, id: transId };
     }
-    if (!ValidationHelper.isValidObjectId(userId)) {
+    if (!isUserIdValid) {
+      logger.warn(`Invalid userId - returning UserNotFound error`);
       return { error: PaymeError.UserNotFound, id: transId };
     }
 
+    logger.warn(`Validation passed - querying database`);
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
-    if (!user) return { error: PaymeError.UserNotFound, id: transId };
-    if (!plan) return { error: PaymeError.ProductNotFound, id: transId };
+    logger.warn(`Database results - plan found: ${!!plan}, user found: ${!!user}`);
+    if (plan) logger.warn(`Plan details - id: ${plan.id}, price: ${plan.price}, name: ${plan.name}`);
+
+    if (!user) {
+      logger.warn(`User not found in database - returning UserNotFound error`);
+      return { error: PaymeError.UserNotFound, id: transId };
+    }
+    if (!plan) {
+      logger.warn(`Plan not found in database - returning ProductNotFound error`);
+      return { error: PaymeError.ProductNotFound, id: transId };
+    }
 
     logger.error(`price in dto is ${createTransactionDto.params.amount}`);
     logger.error(`price in plan is ${plan.price}`);
+    logger.error(`dto amount / 100 = ${createTransactionDto.params.amount / 100}`);
+
     if (createTransactionDto.params.amount / 100 !== plan.price) {
+      logger.warn(`Price mismatch - returning InvalidAmount error`);
       return { error: PaymeError.InvalidAmount, id: transId };
     }
+
+    logger.warn(`Price validation passed - checking for existing transactions`);
 
     // Check for pending transaction
     const existingTransaction = await this.prisma.paymeTransaction.findFirst({
       where: { userId, planId, status: TransactionStatus.PENDING },
     });
 
+    logger.warn(`Existing pending transaction found: ${!!existingTransaction}`);
     if (existingTransaction) {
+      logger.warn(`Existing transaction details - id: ${existingTransaction.id}, paymeTransId: ${existingTransaction.paymeTransId}`);
+
       if (existingTransaction.paymeTransId === transId) {
+        logger.warn(`Same transaction ID found - returning existing transaction`);
         return {
           result: {
             transaction: existingTransaction.id,
@@ -179,6 +211,7 @@ export class PaymeService {
           },
         };
       }
+      logger.warn(`Different transaction ID - returning TransactionInProcess error`);
       return { error: PaymeError.TransactionInProcess, id: transId };
     }
 
@@ -187,8 +220,12 @@ export class PaymeService {
       where: { paymeTransId: transId },
     });
 
+    logger.warn(`Transaction with same paymeTransId exists: ${!!transaction}`);
+
     if (transaction) {
+      logger.warn(`Found existing transaction - checking expiration`);
       if (this.checkTransactionExpiration(transaction.createdAt)) {
+        logger.warn(`Transaction expired - canceling it`);
         await this.prisma.paymeTransaction.update({
           where: { paymeTransId: transId },
           data: {
@@ -209,6 +246,7 @@ export class PaymeService {
         };
       }
 
+      logger.warn(`Transaction not expired - returning existing transaction`);
       return {
         result: {
           transaction: transaction.id,
@@ -218,6 +256,7 @@ export class PaymeService {
       };
     }
 
+    logger.warn(`No existing transaction found - running check again`);
     // Run check again
     const checkTransaction: CheckPerformTransactionDto = {
       method: TransactionMethods.CheckPerformTransaction,
@@ -228,10 +267,14 @@ export class PaymeService {
     };
 
     const checkResult = await this.checkPerformTransaction(checkTransaction);
+    logger.warn(`Check result: ${JSON.stringify(checkResult)}`);
+
     if (checkResult.error) {
+      logger.warn(`Check failed - returning error`);
       return { error: checkResult.error, id: transId };
     }
 
+    logger.warn(`All checks passed - creating new transaction`);
     // Create new transaction
     const newTransaction = await this.prisma.paymeTransaction.create({
       data: {
@@ -244,6 +287,9 @@ export class PaymeService {
       },
     });
 
+    logger.warn(`New transaction created - id: ${newTransaction.id}`);
+    logger.warn(`=== CreateTransaction END ===`);
+
     return {
       result: {
         transaction: newTransaction.id,
@@ -254,11 +300,20 @@ export class PaymeService {
   }
 
   async performTransaction(performTransactionDto: PerformTransactionDto) {
+    logger.warn(`=== PerformTransaction START ===`);
+    logger.warn(`PerformTransaction - transId: ${performTransactionDto.params.id}`);
+
     const transaction = await this.prisma.paymeTransaction.findUnique({
       where: { paymeTransId: performTransactionDto.params.id },
     });
 
+    logger.warn(`Transaction found: ${!!transaction}`);
+    if (transaction) {
+      logger.warn(`Transaction details - id: ${transaction.id}, status: ${transaction.status}, state: ${transaction.state}`);
+    }
+
     if (!transaction) {
+      logger.warn(`Transaction not found - returning error`);
       return {
         error: PaymeError.TransactionNotFound,
         id: performTransactionDto.params.id,
@@ -266,13 +321,17 @@ export class PaymeService {
     }
 
     if (transaction.status !== TransactionStatus.PENDING) {
+      logger.warn(`Transaction status is not PENDING - current status: ${transaction.status}`);
+
       if (transaction.status !== TransactionStatus.PAID) {
+        logger.warn(`Transaction not PAID either - returning CantDoOperation error`);
         return {
           error: PaymeError.CantDoOperation,
           id: performTransactionDto.params.id,
         };
       }
 
+      logger.warn(`Transaction already PAID - returning existing result`);
       return {
         result: {
           state: transaction.state,
@@ -284,7 +343,9 @@ export class PaymeService {
       };
     }
 
+    logger.warn(`Transaction is PENDING - checking expiration`);
     if (this.checkTransactionExpiration(transaction.createdAt)) {
+      logger.warn(`Transaction expired - canceling it`);
       await this.prisma.paymeTransaction.update({
         where: { paymeTransId: performTransactionDto.params.id },
         data: {
@@ -305,6 +366,7 @@ export class PaymeService {
       };
     }
 
+    logger.warn(`Transaction not expired - performing transaction`);
     const performTime = new Date();
     const updatedPayment = await this.prisma.paymeTransaction.update({
       where: { paymeTransId: performTransactionDto.params.id },
@@ -315,18 +377,23 @@ export class PaymeService {
       },
     });
 
+    logger.warn(`Transaction updated to PAID - id: ${updatedPayment.id}`);
+
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: transaction.userId },
       });
       if (user) {
-        // mark as onetime subscription (depends on your user model)
+        logger.warn(`User found for payment success processing - userId: ${user.id}`);
         console.log(`Transaction happened!`);
+      } else {
+        logger.warn(`User not found for payment success processing`);
       }
     } catch (error) {
       logger.error('Error handling payment success:', error);
     }
 
+    logger.warn(`=== PerformTransaction END ===`);
     return {
       result: {
         transaction: updatedPayment.id,
@@ -337,16 +404,28 @@ export class PaymeService {
   }
 
   async cancelTransaction(cancelTransactionDto: CancelTransactionDto) {
+    logger.warn(`=== CancelTransaction START ===`);
+
     const transId = cancelTransactionDto.params.id;
+    logger.warn(`CancelTransaction - transId: ${transId}, reason: ${cancelTransactionDto.params.reason}`);
+
     const transaction = await this.prisma.paymeTransaction.findUnique({
       where: { paymeTransId: transId },
     });
 
-    if (!transaction)
+    logger.warn(`Transaction found: ${!!transaction}`);
+    if (transaction) {
+      logger.warn(`Transaction details - id: ${transaction.id}, status: ${transaction.status}, state: ${transaction.state}`);
+    }
+
+    if (!transaction) {
+      logger.warn(`Transaction not found - returning error`);
       return { id: transId, error: PaymeError.TransactionNotFound };
+    }
 
     let updatedTransaction;
     if (transaction.status === TransactionStatus.PENDING) {
+      logger.warn(`Transaction is PENDING - canceling to PendingCanceled`);
       updatedTransaction = await this.prisma.paymeTransaction.update({
         where: { paymeTransId: transId },
         data: {
@@ -357,6 +436,7 @@ export class PaymeService {
         },
       });
 
+      logger.warn(`Transaction canceled - new state: PendingCanceled`);
       return {
         result: {
           cancel_time: updatedTransaction.cancelAt?.getTime(),
@@ -367,6 +447,7 @@ export class PaymeService {
     }
 
     if (transaction.state !== TransactionState.Paid) {
+      logger.warn(`Transaction state is not Paid - current state: ${transaction.state} - returning existing state`);
       return {
         result: {
           state: transaction.state,
@@ -376,6 +457,7 @@ export class PaymeService {
       };
     }
 
+    logger.warn(`Transaction is Paid - canceling to PaidCanceled`);
     updatedTransaction = await this.prisma.paymeTransaction.update({
       where: { paymeTransId: transId },
       data: {
@@ -386,6 +468,8 @@ export class PaymeService {
       },
     });
 
+    logger.warn(`Transaction canceled - new state: PaidCanceled`);
+    logger.warn(`=== CancelTransaction END ===`);
     return {
       result: {
         cancel_time: updatedTransaction.cancelAt?.getTime(),
@@ -396,32 +480,47 @@ export class PaymeService {
   }
 
   async checkTransaction(checkTransactionDto: CheckTransactionDto) {
+    logger.warn(`=== CheckTransaction START ===`);
+    logger.warn(`CheckTransaction - transId: ${checkTransactionDto.params.id}`);
+
     const transaction = await this.prisma.paymeTransaction.findUnique({
       where: { paymeTransId: checkTransactionDto.params.id },
     });
 
+    logger.warn(`Transaction found: ${!!transaction}`);
+    if (transaction) {
+      logger.warn(`Transaction details - id: ${transaction.id}, status: ${transaction.status}, state: ${transaction.state}`);
+    }
+
     if (!transaction) {
+      logger.warn(`Transaction not found - returning error`);
       return {
         error: PaymeError.TransactionNotFound,
         id: checkTransactionDto.params.id,
       };
     }
 
-    return {
-      result: {
-        create_time: transaction.createdAt.getTime(),
-        perform_time: transaction.performAt
-          ? transaction.performAt.getTime()
-          : 0,
-        cancel_time: transaction.cancelAt ? transaction.cancelAt.getTime() : 0,
-        transaction: transaction.id,
-        state: transaction.state,
-        reason: transaction.reason ?? null,
-      },
+    const result = {
+      create_time: transaction.createdAt.getTime(),
+      perform_time: transaction.performAt
+        ? transaction.performAt.getTime()
+        : 0,
+      cancel_time: transaction.cancelAt ? transaction.cancelAt.getTime() : 0,
+      transaction: transaction.id,
+      state: transaction.state,
+      reason: transaction.reason ?? null,
     };
+
+    logger.warn(`CheckTransaction result: ${JSON.stringify(result)}`);
+    logger.warn(`=== CheckTransaction END ===`);
+
+    return { result };
   }
 
   async getStatement(getStatementDto: GetStatementDto) {
+    logger.warn(`=== GetStatement START ===`);
+    logger.warn(`GetStatement - from: ${getStatementDto.params.from}, to: ${getStatementDto.params.to}`);
+
     const transactions = await this.prisma.paymeTransaction.findMany({
       where: {
         createdAt: {
@@ -431,26 +530,29 @@ export class PaymeService {
       },
     });
 
-    return {
-      result: {
-        transactions: transactions.map((transaction) => ({
-          id: transaction.paymeTransId,
-          time: transaction.createdAt.getTime(),
-          amount: transaction.amount,
-          account: { user_id: transaction.userId, planId: transaction.planId },
-          create_time: transaction.createdAt.getTime(),
-          perform_time: transaction.performAt
-            ? transaction.performAt.getTime()
-            : null,
-          cancel_time: transaction.cancelAt
-            ? transaction.cancelAt.getTime()
-            : null,
-          transaction: transaction.id,
-          state: transaction.state,
-          reason: transaction.reason || null,
-        })),
-      },
+    logger.warn(`Found ${transactions.length} transactions in the specified period`);
+
+    const result = {
+      transactions: transactions.map((transaction) => ({
+        id: transaction.paymeTransId,
+        time: transaction.createdAt.getTime(),
+        amount: transaction.amount,
+        account: { user_id: transaction.userId, planId: transaction.planId },
+        create_time: transaction.createdAt.getTime(),
+        perform_time: transaction.performAt
+          ? transaction.performAt.getTime()
+          : null,
+        cancel_time: transaction.cancelAt
+          ? transaction.cancelAt.getTime()
+          : null,
+        transaction: transaction.id,
+        state: transaction.state,
+        reason: transaction.reason || null,
+      })),
     };
+
+    logger.warn(`=== GetStatement END ===`);
+    return { result };
   }
 
   private checkTransactionExpiration(createdAt: Date) {
