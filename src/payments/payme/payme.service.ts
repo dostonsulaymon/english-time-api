@@ -60,12 +60,8 @@ export class PaymeService {
   ) {
     const planId = checkPerformTransactionDto.params?.account?.plan_id;
     const userId = checkPerformTransactionDto.params?.account?.user_id;
-    const selectedSport =
-      checkPerformTransactionDto.params?.account?.selected_sport;
 
-    logger.info(
-      `LOOK new ADDED field is here in checkPerformTransaction: ${selectedSport}`,
-    );
+    logger.warn(`In CheckPerformTransaction, userId : ${userId} and planId: ${planId}`);
 
     if (
       !ValidationHelper.isValidObjectId(planId) ||
@@ -117,11 +113,7 @@ export class PaymeService {
     const planId = createTransactionDto.params?.account?.plan_id;
     const userId = createTransactionDto.params?.account?.user_id;
     const transId = createTransactionDto.params?.id;
-    const selectedSport = createTransactionDto.params?.account?.selected_sport;
 
-    logger.info(
-      `LOOK new ADDED field is here in createTransaction: ${selectedSport}`,
-    );
 
     if (!ValidationHelper.isValidObjectId(planId)) {
       return { error: PaymeError.ProductNotFound, id: transId };
