@@ -55,57 +55,88 @@ export class PaymeService {
     }
   }
 
+  // Add this to your checkPerformTransaction method, right after the logging line
+
   async checkPerformTransaction(
     checkPerformTransactionDto: CheckPerformTransactionDto,
   ) {
     const planId = checkPerformTransactionDto.params?.account?.plan_id;
     const userId = checkPerformTransactionDto.params?.account?.user_id;
 
-    logger.warn(`In CheckPerformTransaction, userId : ${userId} and planId: ${planId}`);
+    logger.warn(
+      `In CheckPerformTransaction, userId : ${userId} and planId: ${planId}`,
+    );
 
-    if (
-      !ValidationHelper.isValidObjectId(planId) ||
-      !ValidationHelper.isValidObjectId(userId)
-    ) {
+    // Add detailed logging here
+    logger.warn(
+      `About to validate planId: ${planId} (type: ${typeof planId}, length: ${planId?.length})`,
+    );
+    logger.warn(
+      `About to validate userId: ${userId} (type: ${typeof userId}, length: ${userId?.length})`,
+    );
+
+    const isPlanIdValid = ValidationHelper.isValidObjectId(planId);
+    const isUserIdValid = ValidationHelper.isValidObjectId(userId);
+
+    logger.warn(
+      `Validation results - planId valid: ${isPlanIdValid}, userId valid: ${isUserIdValid}`,
+    );
+
+    if (!isPlanIdValid || !isUserIdValid) {
+      logger.warn(
+        `Validation failed - returning error. planId valid: ${isPlanIdValid}, userId valid: ${isUserIdValid}`,
+      );
       return {
         error: {
           code: ErrorStatusCodes.TransactionNotAllowed,
           message: {
             uz: 'Sizda mahsulot/foydalanuvchi topilmadi',
             en: 'Product/user not found',
-            ru: 'Товар/пользователь не найден',
+            ru: 'Ð¢Ð¾Ð²Ð°Ñ€/Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½',
           },
           data: null,
         },
       };
     }
+
+    logger.warn(`Validation passed - proceeding to database queries`);
 
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
+    logger.warn(
+      `Database results - plan found: ${!!plan}, user found: ${!!user}`,
+    );
+
     if (!plan || !user) {
+      logger.warn(`Database query failed - plan: ${!!plan}, user: ${!!user}`);
       return {
         error: {
           code: ErrorStatusCodes.TransactionNotAllowed,
           message: {
             uz: 'Sizda mahsulot/foydalanuvchi topilmadi',
             en: 'Product/user not found',
-            ru: 'Товар/пользователь не найден',
+            ru: 'Ð¢Ð¾Ð²Ð°Ñ€/Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½',
           },
           data: null,
         },
       };
     }
 
-    if (checkPerformTransactionDto.params.amount === 7777) {
+    // Rest of your method...
+    if (checkPerformTransactionDto.params.amount === plan.price) {
+      logger.warn(`Amount matches plan price directly: ${plan.price}`);
       return { result: { allow: true } };
     }
 
     if (plan.price !== checkPerformTransactionDto.params.amount / 100) {
-      logger.warn('Amount mismatch between Payme and Plan price');
+      logger.warn(
+        `Amount mismatch - plan.price: ${plan.price}, received amount: ${checkPerformTransactionDto.params.amount}, divided by 100: ${checkPerformTransactionDto.params.amount / 100}`,
+      );
       return { error: PaymeError.InvalidAmount };
     }
 
+    logger.warn(`All checks passed - allowing transaction`);
     return { result: { allow: true } };
   }
 
@@ -113,7 +144,6 @@ export class PaymeService {
     const planId = createTransactionDto.params?.account?.plan_id;
     const userId = createTransactionDto.params?.account?.user_id;
     const transId = createTransactionDto.params?.id;
-
 
     if (!ValidationHelper.isValidObjectId(planId)) {
       return { error: PaymeError.ProductNotFound, id: transId };
