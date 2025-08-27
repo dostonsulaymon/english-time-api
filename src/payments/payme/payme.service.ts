@@ -158,6 +158,8 @@ export class PaymeService {
     if (!user) return { error: PaymeError.UserNotFound, id: transId };
     if (!plan) return { error: PaymeError.ProductNotFound, id: transId };
 
+    logger.error(`price in dto is ${createTransactionDto.params.amount}`);
+    logger.error(`price in plan is ${plan.price}`);
     if (createTransactionDto.params.amount / 100 !== plan.price) {
       return { error: PaymeError.InvalidAmount, id: transId };
     }
