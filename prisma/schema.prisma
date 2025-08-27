@@ -24,7 +24,7 @@ model User {
   premiumAvatarId String? @db.ObjectId
   premiumAvatar   Avatar? @relation(fields: [premiumAvatarId], references: [id])
 
-  UserPlans UserPlan[]
+  userPlans UserPlan[]
 
   PaymeTransaction PaymeTransaction[]
 }
