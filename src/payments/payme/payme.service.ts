@@ -597,7 +597,7 @@ export class PaymeService {
         create_time: transaction.createdAt.getTime(),
         perform_time: transaction.performAt
           ? transaction.performAt.getTime()
-          : null,
+          : 0,
         cancel_time: transaction.cancelAt
           ? transaction.cancelAt.getTime()
           : null,
