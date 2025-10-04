@@ -10,9 +10,10 @@ import { PaymeModule } from './payments/payme/payme.module';
 import { PlansModule } from './plans/plans.module';
 import { UserPlansModule } from './userplans/userplans.module';
 import { AvatarsModule } from './avatars/avatars.module';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
-  imports: [AuthModule, UsersModule, RatingsModule, PaymeModule, PlansModule, UserPlansModule, AvatarsModule],
+  imports: [AuthModule, UsersModule, RatingsModule, PaymeModule, PlansModule, UserPlansModule, AvatarsModule, TasksModule],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: AuthGuard }],
 })
