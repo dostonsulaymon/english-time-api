@@ -11,5 +11,9 @@ export const config = cleanEnv(process.env, {
   PAYME_MERCHANT_ID: str(),
   PAYME_LOGIN: str(),
   PAYME_PASSWORD: str(),
-  PAYME_PASSWORD_TEST: str()
+  PAYME_PASSWORD_TEST: str(),
+  CLICK_SERVICE_ID: str(),
+  CLICK_MERCHANT_ID: str(),
+  CLICK_SECRET: str(),
+  CLICK_MERCHANT_USER_ID: str()
 });

@@ -27,6 +27,7 @@ model User {
   userPlans UserPlan[]
 
   PaymeTransaction PaymeTransaction[]
+  ClickTransaction ClickTransaction[]
 }
 
 model Avatar {
@@ -67,6 +68,7 @@ model Plan {
   UserPlans UserPlan[]
 
   PaymeTransaction PaymeTransaction[]
+  ClickTransaction ClickTransaction[]
 }
 
 model UserPlan {
@@ -105,6 +107,25 @@ model PaymeTransaction {
   user User @relation(fields: [userId], references: [id])
 
   @@map("payme_transactions")
+}
+
+model ClickTransaction {
+  id              String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String            @map("user_id") @db.ObjectId
+  planId          String            @map("plan_id") @db.ObjectId
+  clickTransId    String            @unique @map("click_trans_id")
+  merchantTransId String            @map("merchant_trans_id")
+  prepareId       String            @map("prepare_id")
+  status          TransactionStatus @default(PENDING)
+  amount          Float
+  action          Int
+  signTime        DateTime          @map("sign_time")
+  createdDate     DateTime          @default(now()) @map("created_date")
+
+  plan Plan @relation(fields: [planId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("click_transactions")
 }
 
 enum TransactionStatus {
