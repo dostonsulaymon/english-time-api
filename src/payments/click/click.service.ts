@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClickRequest } from './types/click-request.type';
@@ -19,6 +20,7 @@ import { ObjectId } from 'mongodb';
 @Injectable()
 export class ClickService {
   private readonly secretKey: string;
+  private readonly logger = new Logger(ClickService.name);
 
   constructor(
     private readonly prismaService: PrismaService,
@@ -29,16 +31,20 @@ export class ClickService {
   }
 
   async handleMerchantTransactions(clickReqBody: ClickRequest) {
+    this.logger.debug(`Incoming Click request: ${JSON.stringify(clickReqBody)}`);
     const actionType = +clickReqBody.action;
 
     clickReqBody.amount = parseFloat(clickReqBody.amount + '');
 
     switch (actionType) {
       case ClickAction.Prepare:
+        this.logger.log('Handling PREPARE action');
         return this.prepare(clickReqBody);
       case ClickAction.Complete:
+        this.logger.log('Handling COMPLETE action');
         return this.complete(clickReqBody);
       default:
+        this.logger.warn(`Unknown action type: ${actionType}`);
         return {
           error: ClickError.ActionNotFound,
           error_note: 'Invalid action',
@@ -47,12 +53,18 @@ export class ClickService {
   }
 
   async prepare(clickReqBody: ClickRequest) {
+    this.logger.debug(
+      `Preparing transaction for user=${clickReqBody.param2}, plan=${clickReqBody.merchant_trans_id}`,
+    );
+
     const planId = clickReqBody.merchant_trans_id;
     const userId = clickReqBody.param2;
     const amount = clickReqBody.amount;
-    const transId = clickReqBody.click_trans_id + ''; // ! in db transId is string
+    const transId = clickReqBody.click_trans_id + '';
     const signString = clickReqBody.sign_string;
     const signTime = new Date(clickReqBody.sign_time).toISOString();
+
+    this.logger.debug(`Validating sign_string for transId=${transId}`);
     const myMD5Params = {
       clickTransId: transId,
       serviceId: clickReqBody.service_id,
@@ -62,88 +74,63 @@ export class ClickService {
       action: clickReqBody.action,
       signTime: clickReqBody.sign_time,
     };
-
     const myMD5Hash = generateMD5(myMD5Params);
 
     if (signString !== myMD5Hash) {
+      this.logger.warn(`Invalid sign_string for transId=${transId}`);
       return {
         error: ClickError.SignFailed,
         error_note: 'Invalid sign_string',
       };
     }
 
+    this.logger.debug(
+      `Checking existing transactions for user=${userId}, plan=${planId}`,
+    );
     const isAlreadyPaid = await this.prismaService.clickTransaction.findFirst({
-      where: {
-        userId,
-        planId,
-        status: 'PAID',
-      },
+      where: { userId, planId, status: 'PAID' },
     });
-
     if (isAlreadyPaid) {
-      return {
-        error: ClickError.AlreadyPaid,
-        error_note: 'Already paid',
-      };
+      this.logger.warn(
+        `Transaction already paid for user=${userId}, plan=${planId}`,
+      );
+      return { error: ClickError.AlreadyPaid, error_note: 'Already paid' };
     }
 
     const isCancelled = await this.prismaService.clickTransaction.findFirst({
-      where: {
-        userId: userId,
-        planId: planId,
-        status: 'CANCELED',
-      },
+      where: { userId, planId, status: 'CANCELED' },
     });
-
     if (isCancelled) {
-      return {
-        error: ClickError.TransactionCanceled,
-        error_note: 'Cancelled',
-      };
+      this.logger.warn(
+        `Transaction canceled earlier for user=${userId}, plan=${planId}`,
+      );
+      return { error: ClickError.TransactionCanceled, error_note: 'Cancelled' };
     }
 
-    const user = await this.prismaService.user.findUnique({
-      where: {
-        id: userId,
-      },
-    });
-
+    const user = await this.prismaService.user.findUnique({ where: { id: userId } });
     if (!user) {
-      return {
-        error: ClickError.UserNotFound,
-        error_note: 'Invalid userId',
-      };
+      this.logger.error(`User not found: ${userId}`);
+      return { error: ClickError.UserNotFound, error_note: 'Invalid userId' };
     }
 
-    const plan = await this.prismaService.plan.findUnique({
-      where: {
-        id: planId,
-      },
-    });
-
+    const plan = await this.prismaService.plan.findUnique({ where: { id: planId } });
     if (!plan) {
-      return {
-        error: ClickError.UserNotFound,
-        error_note: 'Product not found',
-      };
+      this.logger.error(`Plan not found: ${planId}`);
+      return { error: ClickError.UserNotFound, error_note: 'Product not found' };
     }
 
-    // Use plan.price instead of plan.amount
     if (parseInt(`${amount}`) !== plan.price) {
-      console.error('Invalid amount');
-      return {
-        error: ClickError.InvalidAmount,
-        error_note: 'Invalid amount',
-      };
+      this.logger.error(
+        `Amount mismatch: received=${amount}, expected=${plan.price}`,
+      );
+      return { error: ClickError.InvalidAmount, error_note: 'Invalid amount' };
     }
 
     const transaction = await this.prismaService.clickTransaction.findUnique({
-      where: {
-        clickTransId: transId,
-      },
+      where: { clickTransId: transId },
     });
-
     if (transaction && transaction.status == 'CANCELED') {
+      this.logger.warn(`Transaction ${transId} already canceled`);
       return {
         error: ClickError.TransactionCanceled,
         error_note: 'Transaction canceled',
@@ -154,16 +141,8 @@ export class ClickService {
 
     await this.prismaService.clickTransaction.create({
       data: {
-        plan: {
-          connect: {
-            id: planId,
-          },
-        },
-        user: {
-          connect: {
-            id: userId,
-          },
-        },
+        plan: { connect: { id: planId } },
+        user: { connect: { id: userId } },
         signTime,
         merchantTransId: planId,
         action: ClickAction.Prepare,
@@ -175,6 +154,7 @@ export class ClickService {
       },
     });
 
+    this.logger.log(`Prepared transaction transId=${transId}, prepareId=${time}`);
     return {
       click_trans_id: +transId,
       merchant_trans_id: planId,
@@ -185,16 +165,19 @@ export class ClickService {
   }
 
   async complete(clickReqBody: ClickRequest) {
+    this.logger.debug(`Completing transaction transId=${clickReqBody.click_trans_id}`);
+
     const planId = clickReqBody.merchant_trans_id;
     const userId = clickReqBody.param2;
     const prepareId = clickReqBody.merchant_prepare_id;
-    const transId = clickReqBody.click_trans_id + ''; // ! in db transId is string
+    const transId = clickReqBody.click_trans_id + '';
     const serviceId = clickReqBody.service_id;
     const amount = clickReqBody.amount;
     const signTime = clickReqBody.sign_time;
     const error = clickReqBody.error;
     const signString = clickReqBody.sign_string;
 
+    this.logger.debug(`Validating sign_string for completion, transId=${transId}`);
     const myMD5Params = {
       clickTransId: transId,
       serviceId,
@@ -205,51 +188,30 @@ export class ClickService {
       action: clickReqBody.action,
       signTime,
     };
-
     const myMD5Hash = generateMD5(myMD5Params);
 
     if (signString !== myMD5Hash) {
-      return {
-        error: ClickError.SignFailed,
-        error_note: 'Invalid sign_string',
-      };
+      this.logger.warn(`Invalid sign_string for completion transId=${transId}`);
+      return { error: ClickError.SignFailed, error_note: 'Invalid sign_string' };
     }
 
-    const user = await this.prismaService.user.findUnique({
-      where: {
-        id: userId,
-      },
-    });
-
+    const user = await this.prismaService.user.findUnique({ where: { id: userId } });
     if (!user) {
-      return {
-        error: ClickError.UserNotFound,
-        error_note: 'Invalid userId',
-      };
+      this.logger.error(`User not found: ${userId}`);
+      return { error: ClickError.UserNotFound, error_note: 'Invalid userId' };
     }
 
-    const plan = await this.prismaService.plan.findUnique({
-      where: {
-        id: planId,
-      },
-    });
-
+    const plan = await this.prismaService.plan.findUnique({ where: { id: planId } });
     if (!plan) {
-      return {
-        error: ClickError.UserNotFound,
-        error_note: 'Invalid planId',
-      };
+      this.logger.error(`Plan not found: ${planId}`);
+      return { error: ClickError.UserNotFound, error_note: 'Invalid planId' };
     }
 
     const isPrepared = await this.prismaService.clickTransaction.findFirst({
-      where: {
-        prepareId: '' + prepareId,
-        userId: userId,
-        planId: planId,
-      },
+      where: { prepareId: '' + prepareId, userId: userId, planId: planId },
     });
-
     if (!isPrepared) {
+      this.logger.error(`Invalid merchant_prepare_id=${prepareId}`);
       return {
         error: ClickError.TransactionNotFound,
         error_note: 'Invalid merchant_prepare_id',
@@ -257,35 +219,27 @@ export class ClickService {
     }
 
     const isAlreadyPaid = await this.prismaService.clickTransaction.findFirst({
-      where: {
-        planId,
-        prepareId: '' + prepareId,
-        status: 'PAID',
-      },
+      where: { planId, prepareId: '' + prepareId, status: 'PAID' },
     });
-
     if (isAlreadyPaid) {
-      return {
-        error: ClickError.AlreadyPaid,
-        error_note: 'Already paid',
-      };
+      this.logger.warn(
+        `Transaction already paid plan=${planId}, prepareId=${prepareId}`,
+      );
+      return { error: ClickError.AlreadyPaid, error_note: 'Already paid' };
     }
 
-    // Use plan.price instead of plan.amount
     if (parseInt(`${amount}`) !== plan.price) {
-      return {
-        error: ClickError.InvalidAmount,
-        error_note: 'Invalid amount',
-      };
+      this.logger.error(
+        `Amount mismatch on complete: received=${amount}, expected=${plan.price}`,
+      );
+      return { error: ClickError.InvalidAmount, error_note: 'Invalid amount' };
     }
 
     const transaction = await this.prismaService.clickTransaction.findUnique({
-      where: {
-        clickTransId: transId,
-      },
+      where: { clickTransId: transId },
     });
-
     if (transaction && transaction.status == 'CANCELED') {
+      this.logger.warn(`Transaction ${transId} already canceled`);
       return {
         error: ClickError.TransactionCanceled,
         error_note: 'Already cancelled',
@@ -293,46 +247,36 @@ export class ClickService {
     }
 
     if (error > 0) {
+      this.logger.error(
+        `Click reported error=${error} for transaction transId=${transId}`,
+      );
       await this.prismaService.clickTransaction.update({
-        where: {
-          id: transaction.id,
-        },
-        data: {
-          status: 'CANCELED',
-        },
+        where: { id: transaction.id },
+        data: { status: 'CANCELED' },
       });
-      return {
-        error: error,
-        error_note: 'Failed',
-      };
+      return { error: error, error_note: 'Failed' };
     }
 
-    // Update payment status
     await this.prismaService.clickTransaction.update({
-      where: {
-        id: transaction.id,
-      },
-      data: {
-        status: 'PAID',
-      },
+      where: { id: transaction.id },
+      data: { status: 'PAID' },
     });
 
-    // Use UserPlansService.handleSuccessfulPayment instead of manual creation
-    try {
-      // Remove all existing userPlans of this user
-      await this.prismaService.userPlan.deleteMany({
-        where: { userId },
-      });
+    this.logger.log(
+      `Transaction completed successfully: transId=${transId}, userId=${userId}, planId=${planId}`,
+    );
 
-      // Create new plan using the service method
+    try {
+      await this.prismaService.userPlan.deleteMany({ where: { userId } });
       await this.userPlansService.handleSuccessfulPayment(userId, planId);
 
-      console.log(
-        `Successfully processed user plan for userId: ${userId}, planId: ${planId}`,
+      this.logger.log(
+        `Successfully processed user plan for userId=${userId}, planId=${planId}`,
       );
     } catch (paymentError) {
-      console.error('Error handling payment success:', paymentError);
-      // Continue - payment was successful, just log the error
+      this.logger.error(
+        `Error handling successful payment: ${paymentError.message}`,
+      );
     }
 
     return {
@@ -344,24 +288,32 @@ export class ClickService {
   }
 
   async generateClickLink(dto: GenerateLinkDto) {
+    this.logger.debug(
+      `Generating click link for user=${dto.userId}, plan=${dto.planId}`,
+    );
 
     if (!ObjectId.isValid(dto.userId)) {
+      this.logger.error(`Invalid userId: ${dto.userId}`);
       throw new BadRequestException(`Invalid userId: ${dto.userId}`);
     }
     if (!ObjectId.isValid(dto.planId)) {
+      this.logger.error(`Invalid planId: ${dto.planId}`);
       throw new BadRequestException(`Invalid planId: ${dto.planId}`);
     }
+
     const user = await this.prismaService.user.findUnique({
       where: { id: dto.userId },
     });
     if (!user) {
+      this.logger.error(`User not found: ${dto.userId}`);
       throw new NotFoundException(`User with ID ${dto.userId} not found`);
     }
+
     const plan = await this.prismaService.plan.findUnique({
       where: { id: dto.planId },
     });
-
     if (!plan) {
+      this.logger.error(`Plan not found: ${dto.planId}`);
       throw new NotFoundException(`Plan with ID ${dto.planId} not found`);
     }
 
@@ -370,6 +322,9 @@ export class ClickService {
       planId: dto.planId,
       userId: dto.userId,
     };
-    return getClickRedirectLink(clickParams);
+    const link = getClickRedirectLink(clickParams);
+
+    this.logger.log(`Generated Click link: ${link}`);
+    return link;
   }
 }
