@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaClient, TransactionStatus } from '@prisma/client';
 import { TransactionMethods } from './constants/transaction-methods';
 import { CheckPerformTransactionDto } from './dto/check-perform-transaction.dto';
@@ -17,6 +21,7 @@ import { TransactionState } from './constants/transaction-state';
 import { GenerateLinkDto } from './dto/generate-link.dto';
 import { generatePaymeLink } from '../../shared/generators/payme-link.generator';
 import { UserPlansService } from '../../userplans/userplans.service';
+import { ObjectId } from 'mongodb';
 
 @Injectable()
 export class PaymeService {
@@ -618,27 +623,37 @@ export class PaymeService {
     return transactionCreatedAt < timeoutThreshold;
   }
 
-  async generatePaymeLink(dto: GenerateLinkDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: dto.userId },
-    });
-    if (!user) {
-      throw new NotFoundException(`User with ID ${dto.userId} not found`);
-    }
-    const plan = await this.prisma.plan.findUnique({
-      where: { id: dto.planId },
-    });
 
-    if (!plan) {
-      throw new NotFoundException(`Plan with ID ${dto.planId} not found`);
-    }
 
-    const paymeParams = {
-      planId: dto.planId,
-      userId: dto.userId,
-      amount: plan.price,
-    };
-
-    return generatePaymeLink(paymeParams);
+async generatePaymeLink(dto: GenerateLinkDto) {
+  // Validate ObjectIds
+  if (!ObjectId.isValid(dto.userId)) {
+    throw new BadRequestException(`Invalid userId: ${dto.userId}`);
   }
+  if (!ObjectId.isValid(dto.planId)) {
+    throw new BadRequestException(`Invalid planId: ${dto.planId}`);
+  }
+
+  const user = await this.prisma.user.findUnique({
+    where: { id: dto.userId },
+  });
+  if (!user) {
+    throw new NotFoundException(`User with ID ${dto.userId} not found`);
+  }
+
+  const plan = await this.prisma.plan.findUnique({
+    where: { id: dto.planId },
+  });
+  if (!plan) {
+    throw new NotFoundException(`Plan with ID ${dto.planId} not found`);
+  }
+
+  const paymeParams = {
+    planId: dto.planId,
+    userId: dto.userId,
+    amount: plan.price,
+  };
+
+  return generatePaymeLink(paymeParams);
+}
 }
