@@ -96,10 +96,4 @@ export class PlanExpirationTask {
     this.logger.log('Starting daily comprehensive cleanup...');
     await this.handleExpiredPlans();
   }
-
-  @Cron('*/2 * * * *') // Every 2 minutes for testing
-  async testRun() {
-    this.logger.log('TEST RUN - Every 2 minutes');
-    await this.handleExpiredPlans();
-  }
 }
