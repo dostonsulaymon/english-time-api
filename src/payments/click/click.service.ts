@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClickRequest } from './types/click-request.type';
 import { ClickAction, ClickError } from './enums';
@@ -10,6 +14,7 @@ import {
   ClickRedirectParams,
   getClickRedirectLink,
 } from '../../shared/generators/click-redirect-link.generator';
+import { ObjectId } from 'mongodb';
 
 @Injectable()
 export class ClickService {
@@ -339,6 +344,13 @@ export class ClickService {
   }
 
   async generateClickLink(dto: GenerateLinkDto) {
+
+    if (!ObjectId.isValid(dto.userId)) {
+      throw new BadRequestException(`Invalid userId: ${dto.userId}`);
+    }
+    if (!ObjectId.isValid(dto.planId)) {
+      throw new BadRequestException(`Invalid planId: ${dto.planId}`);
+    }
     const user = await this.prismaService.user.findUnique({
       where: { id: dto.userId },
     });
