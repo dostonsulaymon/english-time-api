@@ -8,6 +8,7 @@ import { GenerateLinkDto } from '../payme/dto/generate-link.dto';
 export class ClickController {
   constructor(private readonly clickService: ClickService) {}
   @Post('')
+  @SkipAuth()
   @HttpCode(HttpStatus.OK)
   async handleMerchantTransactions(@Body() clickReqBody: ClickRequest) {
     return await this.clickService.handleMerchantTransactions(clickReqBody);
