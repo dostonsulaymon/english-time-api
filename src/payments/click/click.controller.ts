@@ -3,6 +3,7 @@ import { ClickRequest } from './types/click-request.type';
 import { ClickService } from './click.service';
 import { SkipAuth } from '../../auth/decorator';
 import { GenerateLinkDto } from '../payme/dto/generate-link.dto';
+import logger from '../../utils/logger';
 
 @Controller('click')
 @SkipAuth()
@@ -12,6 +13,7 @@ export class ClickController {
   @SkipAuth()
   @HttpCode(HttpStatus.OK)
   async handleMerchantTransactions(@Body() clickReqBody: ClickRequest) {
+    logger.debug(`Incoming Click request: ${JSON.stringify(clickReqBody)}`);
     return await this.clickService.handleMerchantTransactions(clickReqBody);
   }
 
