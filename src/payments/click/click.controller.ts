@@ -5,6 +5,7 @@ import { SkipAuth } from '../../auth/decorator';
 import { GenerateLinkDto } from '../payme/dto/generate-link.dto';
 
 @Controller('click')
+@SkipAuth()
 export class ClickController {
   constructor(private readonly clickService: ClickService) {}
   @Post('')
