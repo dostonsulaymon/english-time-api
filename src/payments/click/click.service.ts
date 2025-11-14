@@ -87,14 +87,19 @@ export class ClickService {
     this.logger.debug(
       `Checking existing transactions for user=${userId}, plan=${planId}`,
     );
-    const isAlreadyPaid = await this.prismaService.clickTransaction.findFirst({
-      where: { userId, planId, status: 'PAID' },
+    const existingTransaction = await this.prismaService.clickTransaction.findUnique({
+      where: { clickTransId: transId },
     });
-    if (isAlreadyPaid) {
-      this.logger.warn(
-        `Transaction already paid for user=${userId}, plan=${planId}`,
-      );
-      return { error: ClickError.AlreadyPaid, error_note: 'Already paid' };
+
+    if (existingTransaction) {
+      if (existingTransaction.status === 'PAID') {
+        this.logger.warn(`Transaction ${transId} already paid`);
+        return { error: ClickError.AlreadyPaid, error_note: 'Already paid' };
+      }
+      if (existingTransaction.status === 'CANCELED') {
+        this.logger.warn(`Transaction ${transId} already canceled`);
+        return { error: ClickError.TransactionCanceled, error_note: 'Cancelled' };
+      }
     }
 
     const isCancelled = await this.prismaService.clickTransaction.findFirst({
