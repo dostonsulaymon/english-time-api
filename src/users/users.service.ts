@@ -114,7 +114,7 @@ export class UsersService {
             createdAt: 'desc',
           },
         },
-        premiumAvatar: true,  
+        premiumAvatar: true,
       },
     });
 
@@ -133,13 +133,13 @@ export class UsersService {
       include: {
         userPlans: {
           include: {
-            plan: true, 
+            plan: true,
           },
           orderBy: {
             createdAt: 'desc',
           },
         },
-        premiumAvatar: true,  
+        premiumAvatar: true,
       },
     });
 
@@ -150,7 +150,6 @@ export class UsersService {
     this.logger.log(`Successfully retrieved user: ${id}`);
     return user;
   }
-
 
   async updateUser(id: string, updateUserDto: Prisma.UserUpdateInput) {
     this.logger.log(
@@ -222,27 +221,33 @@ export class UsersService {
 
       //this.logger.debug(`Found user: ${user.username} (${user.email})`);
 
-      // Get all-time ranking (fully populated with all users)
-      const allUsers = await this.prisma.user.findMany({
-        orderBy: { coins: 'desc' },
+      // Get all-time ranking efficiently using count query
+      // Count how many users have more coins than the current user
+      const usersWithMoreCoins = await this.prisma.user.count({
+        where: {
+          coins: {
+            gt: user.coins,
+          },
+        },
       });
 
-      // Find user's position in all-time ranking
-      const userIndex = allUsers.findIndex((u) => u.id === id);
-      const allTimeRank = userIndex !== -1 ? userIndex + 1 : null;
+      // User's rank is the count of users with more coins + 1
+      const allTimeRank = usersWithMoreCoins + 1;
       //this.logger.debug(`User ${id} all-time rank: ${allTimeRank}`);
 
-      // Get period-specific data
+      // Get period-specific data with reasonable limit
+      const rankingLimit = 10000; // Adjust based on your user base size
+
       //this.logger.debug('Getting daily rating data');
       const dailyRankings = await this.ratingsService.getByPeriod(
         RatingPeriod.DAILY,
-        allUsers.length, // Get all users to ensure we find our target user
+        rankingLimit,
       );
 
       //this.logger.debug('Getting weekly rating data');
       const weeklyRankings = await this.ratingsService.getByPeriod(
         RatingPeriod.WEEKLY,
-        allUsers.length,
+        rankingLimit,
       );
 
       // Find user in each period ranking
