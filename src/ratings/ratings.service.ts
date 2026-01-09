@@ -49,69 +49,70 @@ export class RatingsService {
     this.logger.log(`Getting ratings for period: ${period}, limit: ${limit}`);
 
     const { startDate, endDate } = this.calculatePeriodDates(period);
-    this.logger.debug(`Period dates - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`);
+    this.logger.debug(
+      `Period dates - start: ${startDate.toISOString()}, end: ${endDate.toISOString()}`,
+    );
 
-    // First find valid user IDs to ensure they exist
-    const validUsers = await this.prisma.user.findMany({
-      select: { id: true },
-    });
-
-    const validUserIds = validUsers.map((user) => user.id);
-
-    // Get all ratings for the period
-    const ratings = await this.prisma.rating.findMany({
+    // Use database aggregation to calculate scores efficiently
+    const userScores = await this.prisma.rating.groupBy({
+      by: ['userId'],
       where: {
         createdAt: {
           gte: startDate,
           lt: endDate,
         },
-        userId: {
-          in: validUserIds,
+      },
+      _sum: {
+        score: true,
+      },
+      orderBy: {
+        _sum: {
+          score: 'desc',
         },
       },
-      include: {
-        user: true,
-      },
-    });
-    this.logger.debug(`Found ${ratings.length} ratings in the period`);
-
-    // Calculate total score per user during this period
-    const userScores = new Map();
-    ratings.forEach((rating) => {
-      const userId = rating.userId;
-      const currentScore = userScores.get(userId) || 0;
-      userScores.set(userId, currentScore + rating.score);
+      take: limit,
     });
 
-    // Get unique users with their data
-    const uniqueUsers = [
-      ...new Map(ratings.map((item) => [item.userId, item.user])).values(),
-    ];
-    this.logger.debug(`Found ${uniqueUsers.length} unique users in the period`);
-
-    // Prepare response with period-specific scores
-    const result = uniqueUsers.map((user) => {
-      const periodScore = userScores.get(user.id) || 0;
-      return {
-        ...user,
-        currentCoins: periodScore, // Add current period coins
-      };
-    });
-
-    // Sort by period scores
-    result.sort((a, b) => b.currentCoins - a.currentCoins);
-
-    // Assign ratings
-    result.forEach((user, index) => {
-      user.rating = index + 1;
-    });
-
-    const finalResult = result.slice(0, limit);
-    this.logger.log(
-      `Returning ${finalResult.length} users for period ${period}`,
+    this.logger.debug(
+      `Found ${userScores.length} users with scores in the period`,
     );
 
-    return finalResult;
+    // Get user details for the top users only
+    const userIds = userScores.map((item) => item.userId);
+
+    if (userIds.length === 0) {
+      this.logger.log('No ratings found for this period');
+      return [];
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        id: {
+          in: userIds,
+        },
+      },
+    });
+
+    // Create a map for quick user lookup
+    const userMap = new Map(users.map((user) => [user.id, user]));
+
+    // Combine user data with their period scores
+    const result = userScores
+      .map((scoreData, index) => {
+        const user = userMap.get(scoreData.userId);
+        if (!user) return null; // Skip if user was deleted
+
+        return {
+          ...user,
+          currentCoins: scoreData._sum.score || 0,
+          rating: index + 1,
+        };
+      })
+      .filter((item) => item !== null); // Remove null entries
+
+    this.logger.log(`Returning ${result.length} users for period ${period}`);
+
+    return result;
   }
 
   async getAllTime(limit: number = 10) {
@@ -239,3 +240,5 @@ export class RatingsService {
     };
   }
 }
+
+
